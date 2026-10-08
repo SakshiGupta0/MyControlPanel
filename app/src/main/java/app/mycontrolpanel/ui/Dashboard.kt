@@ -506,14 +506,10 @@ private fun ModeWidgetCard(w: ModeWidget, mode: Mode, s: AppState, env: Env, dis
                 ModeWidget.CALENDAR -> CalendarWidget(s, env, mode, dispatch)
                 ModeWidget.MUSIC -> {
                     Eyebrow("Music")
-                    val np = s.live.nowPlaying
-                    if (np != null) {
-                        T(np.title.ifBlank { "Playing" }, Type.heading, maxLines = 1)
-                        if (np.artist.isNotBlank()) T(np.artist, Type.small, p.muted, maxLines = 1)
-                    } else T(if (s.live.mediaAccess) "Nothing playing" else "Play / pause whatever's playing", Type.label, p.muted)
+                    T("Controls whatever is playing", Type.label, p.muted)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         RoundIconButton("⏮", { platform.media(MediaKey.PREVIOUS) }, size = 52.dp)
-                        RoundIconButton(if (np?.playing == true) "❚❚" else "▶", { platform.media(MediaKey.PLAY_PAUSE) }, size = 60.dp, filled = true, tag = "playPause")
+                        RoundIconButton("⏯", { platform.media(MediaKey.PLAY_PAUSE) }, size = 60.dp, filled = true, tag = "playPause")
                         RoundIconButton("⏭", { platform.media(MediaKey.NEXT) }, size = 52.dp)
                     }
                     val uri = s.data.prefs.sleepAudioUri.trim()

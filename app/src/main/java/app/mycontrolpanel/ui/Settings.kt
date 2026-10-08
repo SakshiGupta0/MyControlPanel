@@ -255,10 +255,7 @@ private fun MusicSection(s: AppState, dispatch: Dispatch) {
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             T("Play / pause / skip", Type.heading)
-            T("The Music widget's buttons control whatever is playing (Spotify, YouTube Music…). To also show the song name, Android needs you to allow “notification access” for this app — it's only used to read what's playing.",
-                Type.body, p.muted)
-            T(if (s.live.mediaAccess) "Song names: on" else "Song names: off", Type.label, p.muted)
-            if (!s.live.mediaAccess) SecondaryButton("Allow song names…", { platform.openMediaAccessSettings() })
+            T("The Music widget's buttons control whatever is playing (Spotify, YouTube Music…). No permission needed.", Type.body, p.muted)
         }
     }
 }

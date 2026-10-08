@@ -28,10 +28,9 @@ import android.view.KeyEvent
 import app.mycontrolpanel.core.CalendarStatus
 import app.mycontrolpanel.core.modeOrNull
 import app.mycontrolpanel.system.CalendarSource
-import app.mycontrolpanel.system.MediaWatcher
+import app.mycontrolpanel.system.MediaKeys
 import app.mycontrolpanel.ui.MediaKey
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 import androidx.credentials.ClearCredentialStateRequest
@@ -98,11 +97,7 @@ class MainActivity : ComponentActivity() {
                 MediaKey.NEXT -> KeyEvent.KEYCODE_MEDIA_NEXT
                 MediaKey.PREVIOUS -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
             }
-            mediaWatcher.control(code)
-        }
-        override fun openMediaAccessSettings() {
-            runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
-                .onFailure { store.dispatch(Action.ShowMessage("Open Settings → Notifications → Device & app notifications to allow it.")) }
+            MediaKeys.send(this@MainActivity, code)
         }
         override val voiceAvailable: Boolean
             get() = packageManager.queryIntentActivities(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
@@ -171,7 +166,6 @@ class MainActivity : ComponentActivity() {
         voiceCallback = null
     }
 
-    private val mediaWatcher by lazy { MediaWatcher(this) { np, access -> store.dispatch(Action.MediaChanged(np, access)) } }
 
     private val calendarObserver by lazy {
         object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -258,11 +252,6 @@ class MainActivity : ComponentActivity() {
                 // Google Tasks: every 10 minutes while the panel is visible (and right away on wake).
                 launch {
                     while (true) { app.gtasks.syncNow(null); delay(10 * 60_000L) }
-                }
-                // Music: watch what's playing while visible.
-                launch {
-                    mediaWatcher.start()
-                    try { awaitCancellation() } finally { mediaWatcher.stop() }
                 }
             }
         }

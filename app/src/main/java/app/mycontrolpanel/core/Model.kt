@@ -205,8 +205,6 @@ data class CalEvent(val id: String, val title: String, val begin: Long, val end:
 
 enum class CalendarStatus { OFF, NEEDS_PERMISSION, OK, ERROR }
 
-data class NowPlaying(val title: String, val artist: String, val app: String, val playing: Boolean)
-
 data class Account(val uid: String, val email: String, val name: String)
 
 data class Space(val id: String, val name: String, val owner: String, val members: Map<String, String>, val inviteCode: String)
@@ -222,6 +220,4 @@ data class Live(
     val gTasksStatus: String? = null,
     val calendar: List<CalEvent> = emptyList(),
     val calendarStatus: CalendarStatus = CalendarStatus.OFF,
-    val nowPlaying: NowPlaying? = null,
-    val mediaAccess: Boolean = false,
 )

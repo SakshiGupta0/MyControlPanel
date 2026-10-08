@@ -145,7 +145,6 @@ sealed interface Action {
     object ShowFocus : Action
     // live device data
     data class CalendarLoaded(val events: List<CalEvent>, val status: CalendarStatus) : Action
-    data class MediaChanged(val nowPlaying: NowPlaying?, val access: Boolean) : Action
     // accounts & sync (dispatched by the sync engine)
     data class AccountChanged(val account: Account?, val firebaseReady: Boolean) : Action
     data class SyncStatusChanged(val status: SyncStatus, val error: String? = null) : Action
@@ -480,7 +479,6 @@ object Reducer {
 
             // ---------------- live device data ----------------
             is Action.CalendarLoaded -> Reduced(s.copy(live = s.live.copy(calendar = a.events, calendarStatus = a.status)))
-            is Action.MediaChanged -> Reduced(s.copy(live = s.live.copy(nowPlaying = a.nowPlaying, mediaAccess = a.access)))
 
             // ---------------- accounts & sync ----------------
             is Action.AccountChanged -> Reduced(s.copy(live = s.live.copy(account = a.account, firebaseReady = a.firebaseReady,

@@ -41,16 +41,6 @@
 
         <receiver android:name=".system.RoutineAlarmReceiver" android:exported="false" />
 
-        <!-- Only used so Android lets us see which song is playing. -->
-        <service
-            android:name=".system.MediaListenerService"
-            android:exported="false"
-            android:label="My Control Panel — what's playing"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
 
         <receiver android:name=".system.BootReceiver" android:exported="true">
             <intent-filter>

@@ -14,7 +14,6 @@ interface Platform {
     fun calendarAllowed(): Boolean
     fun requestCalendar()
     fun media(key: MediaKey)
-    fun openMediaAccessSettings()
     val voiceAvailable: Boolean
     /** Starts speech-to-text; the result arrives in [onText] (never called if cancelled). */
     fun listen(onText: (String) -> Unit)
