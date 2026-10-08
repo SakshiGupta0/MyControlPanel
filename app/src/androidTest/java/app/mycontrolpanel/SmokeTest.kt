@@ -220,6 +220,7 @@ class SmokeTest {
         rule.onNodeWithTag("settingsButton").performClick()
         rule.onNodeWithTag("settingsSection_ACCOUNT").performScrollTo().performClick()
         rule.waitForIdle()
+        assertTrue("Firebase should be configured in this build", store.state.value.live.firebaseReady)
         if (store.state.value.live.account == null) rule.onNodeWithTag("signIn").performScrollTo().assertExists()
         rule.onNodeWithTag("closeSettings").performClick()
         rule.onNodeWithTag("dashboard").assertIsDisplayed()

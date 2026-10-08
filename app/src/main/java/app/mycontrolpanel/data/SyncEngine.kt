@@ -46,6 +46,9 @@ class SyncEngine(private val ctx: Context, private val store: Store) {
 
     fun start() {
         if (auth == null) { store.dispatch(Action.AccountChanged(null, false)); return }
+        // Known right away (no waiting for Firebase's first callback): accounts are available, and who is signed in.
+        val current = auth.currentUser
+        if (current == null) store.dispatch(Action.AccountChanged(null, true)) else onUser(current)
         auth.addAuthStateListener { a -> onUser(a.currentUser) }
         store.dataListeners += { scheduleUpload() }
     }
