@@ -110,7 +110,7 @@ jobs:
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
       - name: Run smoke tests on emulator (retry once if the emulator flaked)
         if: steps.smoke1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
@@ -125,7 +125,7 @@ jobs:
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
       - name: Report failed tests as annotations
         if: failure()
         run: |
