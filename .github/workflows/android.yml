@@ -71,30 +71,6 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Cache emulator image
-        uses: actions/cache@v4
-        id: avd-cache
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-31-pixel_c-v1
-      - name: Create emulator snapshot (first run only)
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        continue-on-error: true   # a flaky boot here shouldn't fail the run; the test steps boot again
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 31
-          target: default
-          arch: x86_64
-          profile: pixel_c
-          ram-size: 3072M
-          disk-size: 4096M
-          emulator-boot-timeout: 900
-          force-avd-creation: false
-          disable-animations: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "Emulator snapshot created"
       - name: Run smoke tests on emulator
         id: smoke1
         continue-on-error: true
@@ -107,9 +83,8 @@ jobs:
           ram-size: 3072M
           disk-size: 4096M
           emulator-boot-timeout: 900
-          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
       - name: Run smoke tests on emulator (retry once if the emulator flaked)
         if: steps.smoke1.outcome == 'failure'
@@ -122,9 +97,8 @@ jobs:
           ram-size: 3072M
           disk-size: 4096M
           emulator-boot-timeout: 900
-          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
       - name: Report failed tests as annotations
         if: failure()
