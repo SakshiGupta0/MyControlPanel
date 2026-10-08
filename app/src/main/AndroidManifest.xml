@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <!-- Lets the app see Spotify so "Open Spotify" works on Android 11+ -->
     <queries>
@@ -10,6 +11,9 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="spotify" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
         </intent>
     </queries>
 
@@ -36,6 +40,17 @@
         </activity>
 
         <receiver android:name=".system.RoutineAlarmReceiver" android:exported="false" />
+
+        <!-- Only used so Android lets us see which song is playing. -->
+        <service
+            android:name=".system.MediaListenerService"
+            android:exported="false"
+            android:label="My Control Panel — what's playing"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <receiver android:name=".system.BootReceiver" android:exported="true">
             <intent-filter>

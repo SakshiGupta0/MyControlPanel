@@ -9,9 +9,12 @@ import java.time.ZoneId
 // ---------------------------------------------------------------------------
 
 enum class SettingsSection(val label: String) {
-    MODES("Modes"), ROUTINES("Routines"), WIDGETS("Widgets"), TASKS_CALENDAR("Tasks & Calendar"),
+    MODES("Modes"), ROUTINES("Routines"), TASKS("Tasks & focus"), WIDGETS("Dashboard"), CALENDAR("Calendar"),
     MUSIC("Music"), APPEARANCE("Appearance"), DEVICE("Device"), RESET("Reset"), ABOUT("About"),
 }
+
+/** Task list filters: "today", "inbox", "all", "done", or a mode id. */
+object TaskFilter { const val TODAY = "today"; const val INBOX = "inbox"; const val ALL = "all"; const val DONE = "done" }
 
 enum class OverrideLength(val label: String, val minutes: Int) {
     M30("30 min", 30), H1("1 hour", 60), H2("2 hours", 120), H4("4 hours", 240),
@@ -25,6 +28,8 @@ sealed interface Screen {
     /** [initial] is what the editor opened with — used to detect unsaved changes. */
     data class ModeEditor(val draft: Mode, val initial: Mode, val isNew: Boolean, val disableOnSave: Set<String> = emptySet()) : Screen
     data class RoutineEditor(val draft: Routine, val initial: Routine, val isNew: Boolean) : Screen
+    data class Tasks(val filter: String = TaskFilter.TODAY) : Screen
+    object Focus : Screen
 }
 
 sealed interface Dialog {
@@ -37,6 +42,9 @@ sealed interface Dialog {
     data class ConfirmDeleteRoutine(val id: String) : Dialog
     /** index == null → adding a new step. */
     data class StepEditor(val index: Int?, val step: Step) : Dialog
+    /** Brain dump: one text box, saves to the Inbox. */
+    object Capture : Dialog
+    data class TaskEditor(val task: Task, val isNew: Boolean) : Dialog
 }
 
 data class Ui(
@@ -44,18 +52,22 @@ data class Ui(
     val dialog: Dialog? = null,
     val message: String? = null,
     val saveError: String? = null,
+    /** "Pick one for me" result — shown big on the Now card until done or cleared. */
+    val spotlightTaskId: String? = null,
 )
 
-data class AppState(val data: AppData, val ui: Ui = Ui(), val now: Long = 0)
+data class AppState(val data: AppData, val ui: Ui = Ui(), val now: Long = 0, val live: Live = Live())
 
 sealed interface Effect {
     object PlayAlert : Effect
+    /** Softer sound for the mode-change heads-up. */
+    object Chime : Effect
     object RetrySave : Effect
 }
 
 data class Reduced(val state: AppState, val effects: List<Effect> = emptyList())
 
-class Env(val zone: ZoneId, val newId: () -> String)
+class Env(val zone: ZoneId, val rand: (Int) -> Int = { kotlin.random.Random.nextInt(it) }, val newId: () -> String)
 
 sealed interface Action {
     object Tick : Action
@@ -111,13 +123,40 @@ sealed interface Action {
     object SaveSucceeded : Action
     object RetrySave : Action
     data class ShowMessage(val message: String) : Action
+    // tasks
+    data class OpenTasks(val filter: String) : Action
+    data class Capture(val text: String, val today: Boolean = false) : Action
+    data class EditTask(val id: String?) : Action
+    data class UpdateTaskDraft(val task: Task) : Action
+    object SaveTask : Action
+    data class DeleteTask(val id: String) : Action
+    data class ToggleTaskDone(val id: String) : Action
+    data class ToggleToday(val id: String) : Action
+    object PickOne : Action
+    object ClearSpotlight : Action
+    object FreshStart : Action
+    object ClearDone : Action
+    // focus
+    data class StartFocus(val taskId: String?, val minutes: Int? = null) : Action
+    object FocusPause : Action
+    object FocusResume : Action
+    data class FocusExtend(val minutes: Int) : Action
+    data class EndFocus(val markTaskDone: Boolean) : Action
+    object ShowFocus : Action
+    // live device data
+    data class CalendarLoaded(val events: List<CalEvent>, val status: CalendarStatus) : Action
+    data class MediaChanged(val nowPlaying: NowPlaying?, val access: Boolean) : Action
 }
 
 object Reducer {
 
     fun initial(data: AppData, now: Long, env: Env, message: String? = null): AppState {
-        val screen = if (data.run != null && data.routines.any { it.id == data.run.routineId }) Screen.RunningRoutine else Screen.Dashboard
-        val cleaned = if (screen == Screen.Dashboard) data.copy(run = null) else data
+        val screen = when {
+            data.run != null && data.routines.any { it.id == data.run.routineId } -> Screen.RunningRoutine
+            data.focus != null -> Screen.Focus
+            else -> Screen.Dashboard
+        }
+        val cleaned = if (screen != Screen.RunningRoutine) data.copy(run = null) else data
         return reduce(AppState(cleaned, Ui(screen = screen, message = message), now), Action.Tick, now, env).state
     }
 
@@ -143,13 +182,13 @@ object Reducer {
                         ?.let { Scheduler.toEpoch(it.first, env.zone) }
                     else -> now + a.length.minutes * 60_000L
                 }
-                val ns = s.copy(data = d.copy(override = Override(a.modeId, until)), ui = ui.copy(dialog = null))
+                val ns = s.copy(data = d.copy(override = Override(a.modeId, until, now)), ui = ui.copy(dialog = null))
                 tick(ns, env)
             }
             is Action.PickConflictMode -> {
                 // resolves "right now" only: override until the schedule next changes
                 val until = Scheduler.nextChange(d.modes, Scheduler.toLocal(now, env.zone))?.let { Scheduler.toEpoch(it.first, env.zone) }
-                tick(s.copy(data = d.copy(override = Override(a.modeId, until))), env)
+                tick(s.copy(data = d.copy(override = Override(a.modeId, until, now))), env)
             }
             Action.ReturnToSchedule -> tick(s.copy(data = d.copy(override = null), ui = ui.copy(dialog = null)), env)
             is Action.OpenDialog -> ui(ui.copy(dialog = a.dialog))
@@ -168,6 +207,7 @@ object Reducer {
             is Action.StartRoutine -> {
                 val r = d.routines.find { it.id == a.routineId } ?: return msg("That routine no longer exists.")
                 if (d.run != null && !d.run.completed) return msg("Finish or exit the current routine first.")
+                if (d.focus != null) return msg("Finish your focus session first — or end it, then start this.")
                 if (r.steps.isEmpty()) return msg("“${r.name}” has no steps yet. Add some in Settings → Routines.")
                 // One state change: popup gone, routine on screen, prompt cleared. No overlay can be left behind.
                 Reduced(s.copy(
@@ -179,13 +219,16 @@ object Reducer {
             Action.RoutineBack -> withRun(s) { run, r -> Runner.back(run, r, now) }
             Action.RoutinePause -> withRun(s) { run, _ -> Runner.pause(run, now) }
             Action.RoutineResume -> withRun(s) { run, r -> Runner.resume(run, r, now) }
-            Action.ExitRoutine, Action.FinishRoutine ->
+            Action.ExitRoutine, Action.FinishRoutine -> {
                 // Return to the exact dashboard; the mode is derived from data, so nothing else to restore.
-                tick(s.copy(data = d.copy(run = null), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
+                val finished = d.run?.takeIf { it.completed }?.routineId
+                val daily = if (a == Action.FinishRoutine && finished != null) d.daily.copy(routinesDone = d.daily.routinesDone + finished) else d.daily
+                tick(s.copy(data = d.copy(run = null, daily = daily), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
+            }
 
             // ---------------- settings navigation ----------------
             is Action.OpenSettings -> {
-                if (ui.screen == Screen.RunningRoutine) return Reduced(s)
+                if (ui.screen == Screen.RunningRoutine || ui.screen == Screen.Focus) return Reduced(s)
                 ui(ui.copy(screen = Screen.Settings(a.section), dialog = null))
             }
             Action.GoDashboard -> ui(ui.copy(screen = Screen.Dashboard, dialog = null))
@@ -297,6 +340,7 @@ object Reducer {
                     val nd = d.copy(
                         modes = d.modes.filter { it.id != dl.id }.map { it.copy(winsOver = it.winsOver - dl.id) },
                         routines = d.routines.map { it.copy(modeIds = it.modeIds - dl.id) },
+                        tasks = d.tasks.map { if (dl.id in it.modeIds) it.copy(modeIds = it.modeIds - dl.id) else it },
                         override = d.override?.takeIf { it.modeId != dl.id },
                         prefs = d.prefs.copy(dimModeIds = d.prefs.dimModeIds - dl.id),
                     )
@@ -318,8 +362,103 @@ object Reducer {
             Action.ConfirmReset -> {
                 // Destructive: replace everything, recalc mode, single state emission → dashboard rebuilt exactly once.
                 val fresh = Defaults.data()
-                tick(AppState(fresh, Ui(screen = Screen.Dashboard, message = "Everything is back to the defaults."), now), env)
+                tick(AppState(fresh, Ui(screen = Screen.Dashboard, message = "Everything is back to the defaults."), now, s.live), env)
             }
+
+            // ---------------- tasks ----------------
+            is Action.OpenTasks -> {
+                if (ui.screen == Screen.RunningRoutine) return Reduced(s)
+                ui(ui.copy(screen = Screen.Tasks(a.filter), dialog = null))
+            }
+            is Action.Capture -> {
+                val text = a.text.trim()
+                if (text.isEmpty()) return ui(ui.copy(dialog = null))
+                val addToday = a.today && Derive.todayTasks(s).size < d.prefs.todayLimit
+                val t = Task(env.newId(), text.take(300), today = addToday, createdAt = now, order = now)
+                Reduced(s.copy(data = d.copy(tasks = d.tasks + t), ui = ui.copy(dialog = null,
+                    message = if (addToday) "Added to today." else if (a.today) "Saved to your inbox — today's list is full." else "Saved to your inbox. Out of your head ✓")))
+            }
+            is Action.EditTask -> {
+                val t = a.id?.let { id -> d.tasks.find { it.id == id } } ?: Task(env.newId(), "", createdAt = now, order = now)
+                ui(ui.copy(dialog = Dialog.TaskEditor(t, isNew = a.id == null || d.tasks.none { it.id == a.id })))
+            }
+            is Action.UpdateTaskDraft -> {
+                val dl = ui.dialog as? Dialog.TaskEditor ?: return Reduced(s)
+                ui(ui.copy(dialog = dl.copy(task = a.task)))
+            }
+            Action.SaveTask -> {
+                val dl = ui.dialog as? Dialog.TaskEditor ?: return Reduced(s)
+                val problems = Validation.task(dl.task)
+                if (problems.isNotEmpty()) return msg(problems.first())
+                var t = dl.task.copy(title = dl.task.title.trim(), notes = dl.task.notes.trim(),
+                    modeIds = dl.task.modeIds.filter { id -> d.modes.any { it.id == id } }.toSet())
+                val wasToday = d.tasks.find { it.id == t.id }?.today == true
+                var note: String? = null
+                if (t.today && !wasToday && !t.done && Derive.todayTasks(s).size >= d.prefs.todayLimit) {
+                    t = t.copy(today = false); note = "Saved — today's list is full, so it went to the list for later."
+                }
+                val tasks = if (d.tasks.any { it.id == t.id }) d.tasks.map { if (it.id == t.id) t else it } else d.tasks + t
+                Reduced(s.copy(data = d.copy(tasks = tasks), ui = ui.copy(dialog = null, message = note)))
+            }
+            is Action.DeleteTask -> Reduced(s.copy(
+                data = d.copy(tasks = d.tasks.filter { it.id != a.id }),
+                ui = ui.copy(dialog = null, spotlightTaskId = ui.spotlightTaskId?.takeIf { it != a.id }),
+            ))
+            is Action.ToggleTaskDone -> {
+                val t = d.tasks.find { it.id == a.id } ?: return Reduced(s)
+                val nt = if (t.done) t.copy(done = false, doneAt = null) else t.copy(done = true, doneAt = now)
+                Reduced(s.copy(
+                    data = d.copy(tasks = d.tasks.map { if (it.id == t.id) nt else it }),
+                    ui = ui.copy(spotlightTaskId = ui.spotlightTaskId?.takeIf { it != t.id || !nt.done },
+                        message = if (nt.done) Encourage.forTask(Derive.doneTodayCount(s) + 1, env.rand) else ui.message),
+                ))
+            }
+            is Action.ToggleToday -> {
+                val t = d.tasks.find { it.id == a.id } ?: return Reduced(s)
+                if (!t.today && Derive.todayTasks(s).size >= d.prefs.todayLimit)
+                    return msg("Today holds ${d.prefs.todayLimit} things. Finish or un-star one first — short lists actually get done.")
+                data(d.copy(tasks = d.tasks.map { if (it.id == t.id) it.copy(today = !it.today) else it }))
+            }
+            Action.PickOne -> {
+                val pool = Derive.pickPool(s, env).filter { it.id != ui.spotlightTaskId }.ifEmpty { Derive.pickPool(s, env) }
+                if (pool.isEmpty()) return msg("Nothing to pick from yet. Brain-dump a few things first.")
+                ui(ui.copy(spotlightTaskId = pool[env.rand(pool.size)].id, screen = Screen.Dashboard, dialog = null))
+            }
+            Action.ClearSpotlight -> ui(ui.copy(spotlightTaskId = null))
+            Action.FreshStart -> Reduced(s.copy(
+                data = d.copy(tasks = d.tasks.map { if (it.today && !it.done) it.copy(today = false) else it }),
+                ui = ui.copy(spotlightTaskId = null, message = "Clean slate. Pick up to ${d.prefs.todayLimit} things when you're ready."),
+            ))
+            Action.ClearDone -> data(d.copy(tasks = d.tasks.filter { !it.done }))
+
+            // ---------------- focus ----------------
+            is Action.StartFocus -> {
+                if (d.run != null && !d.run.completed) return msg("Finish or exit the current routine first.")
+                val task = a.taskId?.let { id -> d.tasks.find { it.id == id } }
+                val f = Focus.start(task?.id, task?.title ?: "Focus", a.minutes ?: d.prefs.focusMin, now)
+                Reduced(s.copy(data = d.copy(focus = f), ui = ui.copy(screen = Screen.Focus, dialog = null)))
+            }
+            Action.FocusPause -> d.focus?.let { data(d.copy(focus = Focus.pause(it, now))) } ?: Reduced(s)
+            Action.FocusResume -> d.focus?.let { data(d.copy(focus = Focus.resume(it, now))) } ?: Reduced(s)
+            is Action.FocusExtend -> d.focus?.let { data(d.copy(focus = Focus.extend(it, a.minutes, now))) } ?: Reduced(s)
+            Action.ShowFocus -> if (d.focus != null) ui(ui.copy(screen = Screen.Focus, dialog = null)) else Reduced(s)
+            is Action.EndFocus -> {
+                val f = d.focus ?: return ui(ui.copy(screen = Screen.Dashboard))
+                val completedSession = f.finished || Focus.remaining(f, now) == 0L
+                var tasks = d.tasks
+                if (a.markTaskDone && f.taskId != null) tasks = tasks.map { if (it.id == f.taskId) it.copy(done = true, doneAt = now) else it }
+                val daily = if (completedSession) d.daily.copy(focusDone = d.daily.focusDone + 1) else d.daily
+                tick(s.copy(
+                    data = d.copy(focus = null, tasks = tasks, daily = daily),
+                    ui = ui.copy(screen = Screen.Dashboard, dialog = null,
+                        spotlightTaskId = ui.spotlightTaskId?.takeIf { !(a.markTaskDone && it == f.taskId) },
+                        message = if (a.markTaskDone) "Done. That's real progress." else if (completedSession) "Focus session complete. Take a breath." else null),
+                ), env)
+            }
+
+            // ---------------- live device data ----------------
+            is Action.CalendarLoaded -> Reduced(s.copy(live = s.live.copy(calendar = a.events, calendarStatus = a.status)))
+            is Action.MediaChanged -> Reduced(s.copy(live = s.live.copy(nowPlaying = a.nowPlaying, mediaAccess = a.access)))
 
             // ---------------- persistence feedback ----------------
             is Action.SaveFailed -> ui(ui.copy(saveError = a.message))
@@ -350,7 +489,8 @@ object Reducer {
                 if (run == null || run.completed) Reduced(s.copy(data = s.data.copy(run = null), ui = ui.copy(screen = Screen.Dashboard)))
                 else Reduced(s.copy(ui = ui.copy(dialog = Dialog.ConfirmExitRoutine))) // exit must be deliberate
             }
-            is Screen.Settings -> Reduced(s.copy(ui = ui.copy(screen = Screen.Dashboard)))
+            is Screen.Settings, is Screen.Tasks -> Reduced(s.copy(ui = ui.copy(screen = Screen.Dashboard)))
+            Screen.Focus -> Reduced(s.copy(ui = ui.copy(screen = Screen.Dashboard))) // timer keeps running; Now card brings you back
             is Screen.ModeEditor, is Screen.RoutineEditor -> reduce(s, Action.CancelEdit, s.now, env)
         }
     }
@@ -386,6 +526,26 @@ object Reducer {
                 minute >= sc.time && minute < sc.time + PROMPT_WINDOW_MIN && r.id !in d.daily.prompted
         }.map { it.id }
         if (newlyPrompted.isNotEmpty()) d = d.copy(daily = d.daily.copy(prompted = d.daily.prompted + newlyPrompted))
+
+        val focus = d.focus
+        if (focus != null) {
+            val (nf, ring) = Focus.tick(focus, now)
+            if (nf != focus) d = d.copy(focus = nf)
+            if (ring) effects += Effect.PlayAlert
+        }
+
+        // gentle heads-up before the mode changes (time blindness)
+        val warn = d.prefs.transitionWarnMin
+        if (warn > 0 && d.override == null) {
+            val nc = Scheduler.nextChange(d.modes, local)
+            if (nc != null) {
+                val at = Scheduler.toEpoch(nc.first, env.zone)
+                if (at - now <= warn * 60_000L && d.daily.warnedFor != at) {
+                    d = d.copy(daily = d.daily.copy(warnedFor = at))
+                    if (d.prefs.chimeOnTransition) effects += Effect.Chime
+                }
+            }
+        }
 
         val run = d.run
         if (run != null) {
@@ -431,11 +591,107 @@ object Derive {
         return ((s.now - since) / 60_000L).coerceAtLeast(0)
     }
 
+    // ---------- tasks ----------
+    fun todayTasks(s: AppState) = s.data.tasks.filter { it.today && !it.done }.sortedBy { it.order }
+
+    fun isToday(epoch: Long?, s: AppState, env: Env): Boolean =
+        epoch != null && Scheduler.toLocal(epoch, env.zone).toLocalDate() == Scheduler.toLocal(s.now, env.zone).toLocalDate()
+
+    /** Tasks finished today (stay visible, struck through) + routines finished today + focus sessions. */
+    fun doneTodayCount(s: AppState, env: Env? = null): Int {
+        val tasks = if (env == null) s.data.tasks.count { it.done && it.doneAt != null && s.now - it.doneAt < 24 * 3600_000L }
+                    else s.data.tasks.count { it.done && isToday(it.doneAt, s, env) }
+        return tasks + s.data.daily.routinesDone.size + s.data.daily.focusDone
+    }
+
+    fun tasksFor(s: AppState, filter: String, env: Env): List<Task> {
+        val open = s.data.tasks.filter { !it.done }
+        val doneToday = s.data.tasks.filter { it.done && isToday(it.doneAt, s, env) }
+        return when (filter) {
+            TaskFilter.TODAY -> open.filter { it.today }.sortedBy { it.order } + doneToday.filter { it.today }
+            TaskFilter.INBOX -> open.filter { it.modeIds.isEmpty() && !it.today }.sortedByDescending { it.createdAt }
+            TaskFilter.ALL -> open.sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
+            TaskFilter.DONE -> s.data.tasks.filter { it.done }.sortedByDescending { it.doneAt ?: 0 }
+            else -> open.filter { filter in it.modeIds }.sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
+        }
+    }
+
+    fun modeTasks(s: AppState, modeId: String) = s.data.tasks.filter { !it.done && modeId in it.modeIds }
+        .sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
+
+    /** "Pick one for me": today's list first, then this mode's tasks, then the inbox. */
+    fun pickPool(s: AppState, env: Env): List<Task> {
+        todayTasks(s).let { if (it.isNotEmpty()) return it }
+        effective(s, env).modeOrNull()?.let { m -> modeTasks(s, m.id).let { if (it.isNotEmpty()) return it } }
+        return s.data.tasks.filter { !it.done }
+    }
+
+    // ---------- time ----------
+    /** Minutes until the next mode change, if it's within the heads-up window. */
+    fun transitionSoon(s: AppState, env: Env): Pair<Long, ScheduleResult>? {
+        val warn = s.data.prefs.transitionWarnMin
+        if (warn <= 0 || s.data.override != null) return null
+        val (t, r) = nextChange(s, env) ?: return null
+        val mins = (Scheduler.toEpoch(t, env.zone) - s.now + 59_999) / 60_000
+        return if (mins <= warn) mins to r else null
+    }
+
+    /** Start and end of the current mode block, for the "time left" bar. Null when there's no end. */
+    fun modeWindow(s: AppState, env: Env): Pair<Long, Long>? = when (val e = effective(s, env)) {
+        is Effective.Overridden -> e.until?.let { (s.data.override?.setAt ?: s.now) to it }
+        is Effective.Scheduled -> {
+            val local = Scheduler.toLocal(s.now, env.zone)
+            val start = Scheduler.currentBlockStart(s.data.modes, local)
+            val end = Scheduler.nextChange(s.data.modes, local)?.first
+            if (start == null || end == null) null else Scheduler.toEpoch(start, env.zone) to Scheduler.toEpoch(end, env.zone)
+        }
+        else -> null
+    }
+
+    // ---------- calendar ----------
+    fun currentEvent(s: AppState) = s.live.calendar.filter { !it.allDay && it.begin <= s.now && it.end > s.now }.minByOrNull { it.end }
+    fun nextEvent(s: AppState, env: Env) = s.live.calendar.filter { !it.allDay && it.begin > s.now && isToday(it.begin, s, env) }.minByOrNull { it.begin }
+    fun todayEvents(s: AppState, env: Env) = s.live.calendar.filter { it.end > s.now && (isToday(it.begin, s, env) || (it.allDay && it.begin <= s.now)) }.sortedBy { it.begin }
+    fun tomorrowFirst(s: AppState, env: Env): CalEvent? {
+        val tomorrow = Scheduler.toLocal(s.now, env.zone).toLocalDate().plusDays(1)
+        return s.live.calendar.filter { !it.allDay && Scheduler.toLocal(it.begin, env.zone).toLocalDate() == tomorrow }.minByOrNull { it.begin }
+    }
+
+    // ---------- the one thing ----------
+    /** The single most useful thing to show right now (one decision at a time). */
+    fun now(s: AppState, env: Env): NowItem {
+        s.data.focus?.let { return NowItem.FocusActive(it) }
+        prompts(s, env).firstOrNull()?.let { return NowItem.Prompt(it) }
+        s.ui.spotlightTaskId?.let { id -> s.data.tasks.find { it.id == id && !it.done }?.let { return NowItem.Spotlight(it) } }
+        val mode = effective(s, env).modeOrNull()
+        featured(s, mode)?.takeIf { it.id !in s.data.daily.routinesDone }?.let { return NowItem.Featured(it) }
+        todayTasks(s).firstOrNull()?.let { return NowItem.TodayTask(it) }
+        return NowItem.Rest
+    }
+
     fun isDimmed(s: AppState, env: Env): Boolean {
         if (!s.data.prefs.nightDim) return false
         val m = effective(s, env).modeOrNull() ?: return false
         return m.id in s.data.prefs.dimModeIds
     }
+}
+
+sealed interface NowItem {
+    data class FocusActive(val focus: FocusSession) : NowItem
+    data class Prompt(val routine: Routine) : NowItem
+    data class Spotlight(val task: Task) : NowItem
+    data class Featured(val routine: Routine) : NowItem
+    data class TodayTask(val task: Task) : NowItem
+    object Rest : NowItem
+}
+
+/** Warm, varied, never-guilt-tripping feedback. No streaks, no scores. */
+object Encourage {
+    private val lines = listOf("Nice. One less thing.", "Done ✓ Your brain thanks you.", "That counts. Well done.",
+        "Ticked off. Breathe out.", "Look at you go.", "Small step, real progress.")
+    fun forTask(doneToday: Int, rand: (Int) -> Int): String =
+        if (doneToday >= 3 && doneToday % 3 == 0) "That's $doneToday things today. Genuinely good going."
+        else lines[rand(lines.size)]
 }
 
 object Validation {
@@ -459,6 +715,8 @@ object Validation {
         if (sc != null && sc.days.isEmpty()) out += "Pick at least one day for the schedule, or turn the schedule off."
         return out
     }
+
+    fun task(t: Task): List<String> = if (t.title.isBlank()) listOf("Give the task a few words.") else emptyList()
 
     fun step(st: Step): List<String> {
         val out = ArrayList<String>()

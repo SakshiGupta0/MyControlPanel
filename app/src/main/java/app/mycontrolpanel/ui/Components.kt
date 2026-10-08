@@ -44,7 +44,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -64,15 +70,92 @@ val PillShape = RoundedCornerShape(50)
 fun P(): Palette = LocalPalette.current
 
 @Composable
-fun PanelCard(modifier: Modifier = Modifier, strong: Boolean = false, padding: Dp = 22.dp, content: @Composable () -> Unit) {
+fun PanelCard(modifier: Modifier = Modifier, strong: Boolean = false, padding: Dp = 22.dp, tint: Color? = null, content: @Composable () -> Unit) {
     val p = P()
+    val bg = tint ?: if (strong) p.cardStrong else p.card
+    val soft = !p.dark && p != ContrastPalette
     Box(
         modifier
+            .let { if (soft) it.shadow(10.dp, CardShape, ambientColor = p.shadow.copy(alpha = 0.10f), spotColor = p.shadow.copy(alpha = 0.14f)) else it }
             .clip(CardShape)
-            .background(if (strong) p.cardStrong else p.card)
-            .border(1.dp, p.line.copy(alpha = if (p.dark) 0.6f else 0.7f), CardShape)
+            .background(bg)
+            .let { if (!soft) it.border(1.dp, p.line, CardShape) else it }
             .padding(padding)
     ) { content() }
+}
+
+/** Small spaced capitals above a card's content. */
+@Composable
+fun Eyebrow(text: String, color: Color? = null, modifier: Modifier = Modifier) =
+    T(text.uppercase(), Type.eyebrow, color ?: P().muted, modifier)
+
+/** Circular progress (time left). fraction = 1 → full ring. */
+@Composable
+fun ProgressRing(fraction: Float, modifier: Modifier, stroke: Dp = 14.dp, color: Color? = null, track: Color? = null) {
+    val p = P()
+    val c = color ?: p.accent
+    val tr = track ?: p.cardStrong
+    Canvas(modifier) {
+        val sw = stroke.toPx()
+        val inset = sw / 2
+        val arcSize = androidx.compose.ui.geometry.Size(size.width - sw, size.height - sw)
+        val tl = androidx.compose.ui.geometry.Offset(inset, inset)
+        drawArc(tr, 0f, 360f, false, tl, arcSize, style = Stroke(sw))
+        drawArc(c, -90f, 360f * fraction.coerceIn(0f, 1f), false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+    }
+}
+
+/** Big friendly tick-box for tasks (48dp+ touch target). */
+@Composable
+fun CheckCircle(done: Boolean, onClick: () -> Unit, tag: String? = null, size: Dp = 44.dp) {
+    val p = P()
+    Box(
+        Modifier.size(size + 8.dp).clip(PillShape).clickable(onClick = onClick).let { if (tag != null) it.testTag(tag) else it },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(size).clip(PillShape)
+                .background(if (done) p.accent else Color.Transparent)
+                .border(2.5.dp, if (done) p.accent else p.line, PillShape),
+            contentAlignment = Alignment.Center,
+        ) { if (done) Text("✓", style = Type.heading, color = p.onAccent) }
+    }
+}
+
+/** Slow box-breathing guide: the circle grows (in), holds, shrinks (out), holds — 4 s each. */
+@Composable
+fun BreathingGuide(modifier: Modifier = Modifier) {
+    val p = P()
+    val reduce = LocalReduceMotion.current
+    val t by produceState(0L) { val start = System.currentTimeMillis(); while (true) { value = System.currentTimeMillis() - start; kotlinx.coroutines.delay(if (reduce) 1000 else 33) } }
+    val phase = ((t / 4000) % 4).toInt()
+    val within = (t % 4000) / 4000f
+    val scale = when (phase) { 0 -> within; 1 -> 1f; 2 -> 1f - within; else -> 0f }
+    val label = listOf("Breathe in", "Hold", "Breathe out", "Hold")[phase]
+    Box(modifier, contentAlignment = Alignment.Center) {
+        val s = if (reduce) 0.7f else 0.45f + 0.55f * scale
+        Canvas(Modifier.fillMaxSize()) {
+            val r = size.minDimension / 2
+            drawCircle(p.accentSoft, r)
+            drawCircle(p.accent.copy(alpha = 0.55f), r * s)
+        }
+        T(label, Type.title, if (scale > 0.5f && !reduce) p.onAccent else p.text)
+    }
+}
+
+@Composable
+fun TintSwatches(selected: Int, onPick: (Int) -> Unit) {
+    val p = P()
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        TINTS.indices.forEach { i ->
+            Box(
+                Modifier.size(52.dp).clip(PillShape).background(tintColor(i, p))
+                    .border(if (i == selected) 3.dp else 1.dp, if (i == selected) p.accent else p.line, PillShape)
+                    .clickable { onPick(i) },
+                contentAlignment = Alignment.Center,
+            ) { if (i == selected) Text("✓", style = Type.label, color = p.text) }
+        }
+    }
 }
 
 @Composable
@@ -255,7 +338,7 @@ fun IconPicker(selected: String, onPick: (String) -> Unit) {
 
 /** Deliberate exit (PRD §17): press and hold ~1.2 s. A quick tap only shows a hint. */
 @Composable
-fun HoldToExitButton(onExit: () -> Unit, tag: String = "holdExit") {
+fun HoldToExitButton(onExit: () -> Unit, tag: String = "holdExit", label: String = "Hold to exit") {
     val p = P()
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -283,7 +366,7 @@ fun HoldToExitButton(onExit: () -> Unit, tag: String = "holdExit") {
             Box(Modifier.matchParentSize().drawBehind {
                 drawRect(fill, size = androidx.compose.ui.geometry.Size(size.width * progress.value, size.height))
             })
-            Text("Hold to exit", style = Type.label, color = p.muted, modifier = Modifier.align(Alignment.Center).padding(horizontal = 20.dp))
+            Text(label, style = Type.label, color = p.muted, modifier = Modifier.align(Alignment.Center).padding(horizontal = 20.dp))
         }
         if (hint && progress.value == 0f) T("Press and hold", Type.small, p.muted, Modifier.padding(top = 4.dp, end = 8.dp))
     }

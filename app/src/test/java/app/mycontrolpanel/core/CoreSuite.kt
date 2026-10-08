@@ -309,6 +309,131 @@ object CoreSuite {
             ok(!Derive.isDimmed(st0(5, 12), env), "not at noon")
             ok(!Derive.isDimmed(st0(5, 23).go(Action.UpdatePrefs(Prefs(nightDim = false))), env), "toggle off")
         },
+
+        "brain dump: capture goes to the inbox, empty text does nothing" to {
+            var s = st0().go(Action.OpenDialog(Dialog.Capture)).go(Action.Capture("  call the bank  "))
+            eq(null, s.ui.dialog, "dialog closed"); eq("call the bank", s.data.tasks.single().title, "trimmed")
+            eq(listOf("call the bank"), Derive.tasksFor(s, TaskFilter.INBOX, env).map { it.title }, "in inbox")
+            s = s.go(Action.OpenDialog(Dialog.Capture)).go(Action.Capture("   ")); eq(1, s.data.tasks.size, "blank ignored"); eq(null, s.ui.dialog, "closed")
+        },
+
+        "today's three: soft limit, toggle, fresh start" to {
+            var s = st0()
+            listOf("a", "b", "c", "d").forEach { s = s.go(Action.Capture(it, today = true)) }
+            eq(3, Derive.todayTasks(s).size, "limit 3"); ok(s.ui.message!!.contains("full"), "explains overflow")
+            val d = s.data.tasks.first { it.title == "d" }
+            s = s.go(Action.ToggleToday(d.id)); ok(!s.data.tasks.first { it.id == d.id }.today, "4th refused"); ok(s.ui.message!!.contains("Today holds"), "kind msg")
+            s = s.go(Action.ToggleTaskDone(s.data.tasks.first { it.title == "a" }.id))
+            eq(2, Derive.todayTasks(s).size, "done leaves open list"); eq(3, Derive.tasksFor(s, TaskFilter.TODAY, env).size, "done still visible today")
+            s = s.go(Action.ToggleToday(d.id)); ok(s.data.tasks.first { it.id == d.id }.today, "room again")
+            s = s.go(Action.FreshStart); eq(0, Derive.todayTasks(s).size, "fresh start"); eq(4, s.data.tasks.size, "nothing deleted")
+            s = s.go(Action.ClearDone); eq(3, s.data.tasks.size, "done cleared")
+        },
+
+        "pick one for me spotlights a task; finishing it clears the spotlight" to {
+            var s = st0().go(Action.PickOne); ok(s.ui.message!!.contains("Nothing"), "empty pool message")
+            s = s.go(Action.Capture("x", today = true)).go(Action.Capture("y", today = true))
+            s = s.go(Action.PickOne); val id = s.ui.spotlightTaskId!!
+            ok(Derive.now(s, env) is NowItem.Spotlight, "now = spotlight")
+            s = s.go(Action.PickOne); ok(s.ui.spotlightTaskId != id, "re-pick gives a different one")
+            s = s.go(Action.ToggleTaskDone(s.ui.spotlightTaskId!!)); eq(null, s.ui.spotlightTaskId, "cleared on done")
+        },
+
+        "task editor: validation, modes, delete" to {
+            var s = st0().go(Action.EditTask(null)).go(Action.SaveTask); ok(s.ui.dialog is Dialog.TaskEditor, "blank blocked")
+            val t = (s.ui.dialog as Dialog.TaskEditor).task
+            s = s.go(Action.UpdateTaskDraft(t.copy(title = "Report", modeIds = setOf("work", "ghost")))).go(Action.SaveTask)
+            eq(setOf("work"), s.data.tasks.single().modeIds, "unknown mode dropped")
+            eq(listOf("Report"), Derive.modeTasks(s, "work").map { it.title }, "mode filter")
+            s = s.go(Action.DeleteTask(s.data.tasks.single().id)); eq(0, s.data.tasks.size, "deleted")
+        },
+
+        "focus timer: start, pause, extend, bell, end marks task done" to {
+            var s = st0().go(Action.Capture("write intro", today = true))
+            val tid = s.data.tasks.single().id
+            s = s.go(Action.StartFocus(tid, 25)); eq(Screen.Focus, s.ui.screen, "focus screen")
+            val t0 = s.now
+            s = s.go(Action.FocusPause, t0 + 60_000); s = s.go(Action.Tick, t0 + 3_600_000)
+            eq(24 * 60_000L, Focus.remaining(s.data.focus!!, s.now), "paused holds")
+            s = s.go(Action.FocusResume, t0 + 3_600_000).go(Action.FocusExtend(5), t0 + 3_600_000)
+            eq(29 * 60_000L, Focus.remaining(s.data.focus!!, t0 + 3_600_000), "extended")
+            val r = Reducer.reduce(s, Action.Tick, t0 + 3_600_000 + 29 * 60_000L, env)
+            ok(r.effects.contains(Effect.PlayAlert), "bell"); ok(r.state.data.focus!!.finished, "finished")
+            ok(Reducer.reduce(r.state, Action.Tick, r.state.now + 1000, env).effects.isEmpty(), "bell once")
+            s = r.state.go(Action.EndFocus(markTaskDone = true))
+            eq(Screen.Dashboard, s.ui.screen, "back"); eq(null, s.data.focus, "cleared"); ok(s.data.tasks.single().done, "task done")
+            eq(1, s.data.daily.focusDone, "counted")
+        },
+
+        "focus survives restart, back leaves it running, routines wait for it" to {
+            var s = st0().go(Action.StartFocus(null, 10))
+            val re = Reducer.initial(Codec.decode(Codec.encode(s.data)), s.now + 60_000, env)
+            eq(Screen.Focus, re.ui.screen, "restored to focus")
+            s = s.go(Action.Back); eq(Screen.Dashboard, s.ui.screen, "back to dashboard"); ok(s.data.focus != null, "still running")
+            ok(Derive.now(s, env) is NowItem.FocusActive, "now card shows it")
+            s = s.go(Action.StartRoutine("r_lunch")); eq(Screen.Dashboard, s.ui.screen, "routine blocked"); ok(s.ui.message != null, "says why")
+            s = s.go(Action.ShowFocus); eq(Screen.Focus, s.ui.screen, "return to focus")
+        },
+
+        "heads-up chime once before a mode change" to {
+            var s = st0(5, 18)  // Work until 18:30
+            var r = Reducer.reduce(s, Action.Tick, t(5, 18, 19), env); ok(r.effects.isEmpty(), "too early")
+            r = Reducer.reduce(r.state, Action.Tick, t(5, 18, 21), env); ok(r.effects.contains(Effect.Chime), "chime at 9 min")
+            eq(9L, Derive.transitionSoon(r.state, env)?.first, "9 minutes left")
+            r = Reducer.reduce(r.state, Action.Tick, t(5, 18, 25), env); ok(!r.effects.contains(Effect.Chime), "only once")
+            s = r.state.go(Action.UpdatePrefs(r.state.data.prefs.copy(chimeOnTransition = false)))
+            r = Reducer.reduce(s, Action.Tick, t(5, 22, 52), env); ok(!r.effects.contains(Effect.Chime), "chime can be off")
+            ok(Derive.transitionSoon(r.state, env) != null, "banner still shows")
+            val ov = st0(5, 18).go(Action.SwitchMode("dayoff", OverrideLength.UNTIL_RETURN))
+            eq(null, Derive.transitionSoon(ov.go(Action.Tick, t(5, 18, 25)), env), "no heads-up during a manual override")
+        },
+
+        "mode time-left window" to {
+            val s = st0(5, 12)
+            eq(t(5, 10) to t(5, 18, 30), Derive.modeWindow(s, env), "work block 10:00-18:30")
+            val night = st0(6, 2)
+            eq(t(5, 23) to t(6, 7), Derive.modeWindow(night, env), "bedtime across midnight")
+            val ov = s.go(Action.SwitchMode("evening", OverrideLength.H1))
+            eq(s.now to s.now + 3_600_000, Derive.modeWindow(ov, env), "override window")
+            eq(null, Derive.modeWindow(s.go(Action.SwitchMode("evening", OverrideLength.UNTIL_RETURN)), env), "no end → no bar")
+        },
+
+        "the Now card picks one thing in priority order" to {
+            var s = st0(5, 7).go(Action.Tick, t(5, 7, 31))
+            ok(Derive.now(s, env) is NowItem.Prompt, "routine prompt first")
+            s = s.go(Action.DismissPrompt("r_morning"))
+            ok((Derive.now(s, env) as NowItem.Featured).routine.id == "r_morning", "then featured routine")
+            s = s.go(Action.StartRoutine("r_morning"))
+            repeat(6) { s = s.go(Action.RoutineDone) }
+            s = s.go(Action.FinishRoutine); ok("r_morning" in s.data.daily.routinesDone, "finished counted")
+            eq(NowItem.Rest, Derive.now(s, env), "nothing left → rest")
+            s = s.go(Action.Capture("stretch", today = true))
+            ok(Derive.now(s, env) is NowItem.TodayTask, "then today's task")
+            eq(1, Derive.doneTodayCount(s, env), "one routine finished today")
+        },
+
+        "calendar: current, next, tomorrow" to {
+            val base = st0(5, 12)
+            val ev = listOf(
+                CalEvent("1", "Standup", t(5, 11, 30), t(5, 12, 15), false),
+                CalEvent("2", "Design review", t(5, 15), t(5, 16), false),
+                CalEvent("3", "Gym", t(6, 8), t(6, 9), false),
+                CalEvent("4", "Holiday", t(5, 0), t(6, 0), true),
+            )
+            val s = base.go(Action.CalendarLoaded(ev, CalendarStatus.OK))
+            eq("Standup", Derive.currentEvent(s)?.title, "current"); eq("Design review", Derive.nextEvent(s, env)?.title, "next today")
+            eq("Gym", Derive.tomorrowFirst(s, env)?.title, "tomorrow"); eq(listOf("Holiday", "Standup", "Design review"), Derive.todayEvents(s, env).map { it.title }, "today list")
+            ok(!Codec.encode(s.data).contains("Standup"), "calendar is live-only, never saved")
+        },
+
+        "v0.1 save files load into v0.2" to {
+            val old = """{"schema":1,"modes":[{"id":"bedtime","name":"Bedtime","icon":"🌙","start":1380,"end":420,"days":[1,2,3,4,5,6,7],
+                "widgets":[{"w":"SLEEP_AUDIO","on":true},{"w":"ROUTINES","on":true}]}],"routines":[],"prefs":{"use24h":true}}"""
+            val d = Codec.decode(old)
+            eq(ModeWidget.MUSIC, d.modes[0].widgets[0].widget, "SLEEP_AUDIO → MUSIC"); ok(d.modes[0].widgets[0].enabled, "kept on")
+            eq(4, d.modes[0].tint, "bedtime tint"); eq(emptyList<Task>(), d.tasks, "no tasks"); ok(d.prefs.use24h, "prefs kept")
+            eq(3, d.prefs.todayLimit, "new prefs default")
+        },
     )
 
     /** Runs everything; returns failure messages (empty = all passed). */

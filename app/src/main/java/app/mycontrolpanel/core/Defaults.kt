@@ -9,23 +9,26 @@ object Defaults {
     private val WEEKEND = setOf(6, 7)
     private fun hm(h: Int, m: Int = 0) = h * 60 + m
 
+    /** Default colour wash per built-in mode (indices into the UI tint list). */
+    fun tintFor(id: String): Int = when (id) { "morning" -> 0; "work" -> 1; "dayoff" -> 2; "evening" -> 3; "bedtime" -> 4; else -> 5 }
+
     fun modes(): List<Mode> = listOf(
         Mode("morning", "Morning", "☀️", hm(7), hm(10), ALL,
-            widgets = defaultWidgetSlots(listOf(ROUTINES, NEXT_MODE, TASKS)), featuredRoutineId = "r_morning", order = 0),
+            widgets = defaultWidgetSlots(listOf(TASKS, ROUTINES, CALENDAR)), featuredRoutineId = "r_morning", order = 0, tint = 0),
         Mode("work", "Work", "💼", hm(10), hm(18, 30), WEEKDAYS,
-            widgets = defaultWidgetSlots(listOf(TASKS, CALENDAR, BREAK_REMINDER, ROUTINES)), featuredRoutineId = "r_start_work", order = 1),
+            widgets = defaultWidgetSlots(listOf(TASKS, FOCUS, CALENDAR, BREAK_REMINDER)), featuredRoutineId = "r_start_work", order = 1, tint = 1),
         Mode("dayoff", "Day Off", "🌿", hm(10), hm(18, 30), WEEKEND,
-            widgets = defaultWidgetSlots(listOf(TASKS, ROUTINES, NEXT_MODE)), featuredRoutineId = "r_room_reset", order = 2),
+            widgets = defaultWidgetSlots(listOf(TASKS, ROUTINES, MUSIC, NEXT_MODE)), featuredRoutineId = "r_room_reset", order = 2, tint = 2),
         Mode("evening", "Evening", "🌇", hm(18, 30), hm(23), ALL,
-            widgets = defaultWidgetSlots(listOf(ROUTINES, TASKS, NEXT_MODE)), featuredRoutineId = "r_evening", order = 3),
+            widgets = defaultWidgetSlots(listOf(ROUTINES, TASKS, MUSIC, NEXT_MODE)), featuredRoutineId = "r_evening", order = 3, tint = 3),
         Mode("bedtime", "Bedtime", "🌙", hm(23), hm(7), ALL,
-            widgets = defaultWidgetSlots(listOf(CALENDAR, SLEEP_AUDIO, ROUTINES)), featuredRoutineId = "r_bedtime", order = 4),
+            widgets = defaultWidgetSlots(listOf(CALENDAR, MUSIC, ROUTINES)), featuredRoutineId = "r_bedtime", order = 4, tint = 4),
     )
 
     private var stepSeq = 0
-    private fun s(title: String, instruction: String = "", min: Int = 0, sec: Int = 0, auto: Boolean = false): Step {
+    private fun s(title: String, instruction: String = "", min: Int = 0, sec: Int = 0, auto: Boolean = false, breathe: Boolean = false): Step {
         val d = min * 60 + sec
-        return Step("s${++stepSeq}", title, instruction, d, timerEnabled = d > 0, autoAdvance = auto)
+        return Step("s${++stepSeq}", title, instruction, d, timerEnabled = d > 0, autoAdvance = auto, breathing = breathe)
     }
 
     fun routines(): List<Routine> {
@@ -70,7 +73,7 @@ object Defaults {
                 s("Brush teeth & skincare"),
                 s("Dim the lights"),
                 s("Check tomorrow's first event"),
-                s("Read or breathe", "No screens. A few pages or slow breaths.", min = 10),
+                s("Read or breathe", "No screens. A few pages or slow breaths.", min = 10, breathe = true),
                 s("Lights out", "Goodnight."),
             ), modeIds = setOf("bedtime"), schedule = RoutineSchedule(hm(23), ALL, NotifyStyle.PROMPT), quick = false, order = 5),
             Routine("r_room_reset", "Room Reset", "Ten minutes to a calmer room", "🧺", listOf(
@@ -81,7 +84,7 @@ object Defaults {
             ), modeIds = setOf("dayoff", "evening"), quick = true, order = 6),
             Routine("r_calm_down", "Calm Down", "When it's all a bit much", "🫧", listOf(
                 s("Sit down somewhere comfortable"),
-                s("Box breathing", "In 4 · hold 4 · out 4 · hold 4.", min = 2, auto = true),
+                s("Box breathing", "Follow the circle. In 4 · hold 4 · out 4 · hold 4.", min = 2, auto = true, breathe = true),
                 s("Name 5 things you can see"),
                 s("Drink some water"),
                 s("Choose one small next step"),

@@ -2,8 +2,8 @@ package app.mycontrolpanel.core
 
 /**
  * AppData <-> JSON. Decoding is defensive: any missing/odd field falls back to a sane default,
- * so an older or partially-written file never crashes the app. A file that is not JSON at all
- * throws, and the repository then keeps a backup and starts from defaults with a visible message.
+ * so an older or partially-written file never crashes the app (v0.1 files load fine).
+ * A file that is not JSON at all throws; the repository then keeps a backup and starts from defaults.
  */
 object Codec {
 
@@ -11,10 +11,12 @@ object Codec {
         "schema" to d.schema,
         "modes" to d.modes.map(::modeOut),
         "routines" to d.routines.map(::routineOut),
+        "tasks" to d.tasks.map(::taskOut),
         "prefs" to prefsOut(d.prefs),
-        "override" to d.override?.let { mapOf("modeId" to it.modeId, "until" to it.until) },
+        "override" to d.override?.let { mapOf("modeId" to it.modeId, "until" to it.until, "setAt" to it.setAt) },
         "daily" to dailyOut(d.daily),
         "run" to d.run?.let(::runOut),
+        "focus" to d.focus?.let(::focusOut),
         "lastModeKey" to d.lastModeKey,
         "modeEnteredAt" to d.modeEnteredAt,
     ))
@@ -25,33 +27,38 @@ object Codec {
         val modes = (root["modes"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::modeIn) } ?: defaults.modes
         val routines = (root["routines"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::routineIn) } ?: defaults.routines
         return AppData(
-            schema = root.int("schema", 1),
+            schema = 2,
             modes = modes,
             routines = routines,
+            tasks = (root["tasks"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::taskIn) } ?: emptyList(),
             prefs = (root["prefs"] as? Map<*, *>)?.let(::prefsIn) ?: Prefs(),
             override = (root["override"] as? Map<*, *>)?.let { m ->
-                m.str("modeId")?.let { Override(it, m.long("until")) }
+                m.str("modeId")?.let { Override(it, m.long("until"), m.long("setAt") ?: 0) }
             },
             daily = (root["daily"] as? Map<*, *>)?.let(::dailyIn) ?: Daily(),
             run = (root["run"] as? Map<*, *>)?.let(::runIn),
+            focus = (root["focus"] as? Map<*, *>)?.let(::focusIn),
             lastModeKey = root.str("lastModeKey"),
             modeEnteredAt = root.long("modeEnteredAt"),
         )
     }
 
     // ---- modes ----
-    private fun modeOut(m: Mode) = mapOf(
+    fun modeOut(m: Mode) = mapOf(
         "id" to m.id, "name" to m.name, "icon" to m.icon, "start" to m.start, "end" to m.end,
         "days" to m.days.sorted(), "scheduled" to m.scheduled,
         "widgets" to m.widgets.map { mapOf("w" to it.widget.name, "on" to it.enabled) },
-        "featured" to m.featuredRoutineId, "order" to m.order, "winsOver" to m.winsOver.toList(),
+        "featured" to m.featuredRoutineId, "order" to m.order, "winsOver" to m.winsOver.toList(), "tint" to m.tint,
     )
 
-    private fun modeIn(m: Map<*, *>): Mode? {
+    private val LEGACY_WIDGETS = mapOf("SLEEP_AUDIO" to ModeWidget.MUSIC)
+
+    fun modeIn(m: Map<*, *>): Mode? {
         val id = m.str("id") ?: return null
         val slots = (m["widgets"] as? List<*>)?.mapNotNull { w ->
             val mw = w as? Map<*, *> ?: return@mapNotNull null
-            val widget = ModeWidget.values().find { it.name == mw.str("w") } ?: return@mapNotNull null
+            val name = mw.str("w")
+            val widget = ModeWidget.values().find { it.name == name } ?: LEGACY_WIDGETS[name] ?: return@mapNotNull null
             WidgetSlot(widget, mw.bool("on", true))
         } ?: emptyList()
         return Mode(
@@ -65,23 +72,24 @@ object Codec {
             widgets = normalizeSlots(slots),
             featuredRoutineId = m.str("featured"),
             order = m.int("order", 0),
-            winsOver = (m["winsOver"] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet(),
+            winsOver = m.strSet("winsOver"),
+            tint = m.int("tint", Defaults.tintFor(id)).coerceIn(0, TINT_COUNT - 1),
         )
     }
 
     // ---- routines ----
-    private fun routineOut(r: Routine) = mapOf(
+    fun routineOut(r: Routine) = mapOf(
         "id" to r.id, "name" to r.name, "description" to r.description, "icon" to r.icon,
         "steps" to r.steps.map { s ->
             mapOf("id" to s.id, "title" to s.title, "instruction" to s.instruction, "duration" to s.durationSec,
-                "timer" to s.timerEnabled, "auto" to s.autoAdvance, "alert" to s.alert)
+                "timer" to s.timerEnabled, "auto" to s.autoAdvance, "alert" to s.alert, "breathing" to s.breathing)
         },
         "modeIds" to r.modeIds.toList(),
         "schedule" to r.schedule?.let { mapOf("time" to it.time, "days" to it.days.sorted(), "notify" to it.notify.name) },
         "quick" to r.quick, "enabled" to r.enabled, "order" to r.order,
     )
 
-    private fun routineIn(m: Map<*, *>): Routine? {
+    fun routineIn(m: Map<*, *>): Routine? {
         val id = m.str("id") ?: return null
         val steps = (m["steps"] as? List<*>)?.mapNotNull { st ->
             val s = st as? Map<*, *> ?: return@mapNotNull null
@@ -93,6 +101,7 @@ object Codec {
                 timerEnabled = s.bool("timer", false),
                 autoAdvance = s.bool("auto", false),
                 alert = s.bool("alert", true),
+                breathing = s.bool("breathing", false),
             )
         } ?: emptyList()
         val sched = (m["schedule"] as? Map<*, *>)?.let { s ->
@@ -104,18 +113,43 @@ object Codec {
         }
         return Routine(
             id = id, name = m.str("name") ?: "Routine", description = m.str("description") ?: "",
-            icon = m.str("icon") ?: "✨", steps = steps,
-            modeIds = (m["modeIds"] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet(),
+            icon = m.str("icon") ?: "✨", steps = steps, modeIds = m.strSet("modeIds"),
             schedule = sched, quick = m.bool("quick", false), enabled = m.bool("enabled", true), order = m.int("order", 0),
         )
     }
 
-    // ---- prefs / daily / run ----
+    // ---- tasks ----
+    fun taskOut(t: Task) = mapOf(
+        "id" to t.id, "title" to t.title, "notes" to t.notes, "modeIds" to t.modeIds.toList(), "today" to t.today,
+        "done" to t.done, "doneAt" to t.doneAt, "createdAt" to t.createdAt, "order" to t.order,
+    )
+
+    fun taskIn(m: Map<*, *>): Task? {
+        val id = m.str("id") ?: return null
+        val title = m.str("title") ?: return null
+        return taskOf(m, id, title)
+    }
+
+    private fun taskOf(m: Map<*, *>, id: String, title: String) = Task(
+        id = id,
+        title = title,
+        notes = m.str("notes") ?: "",
+        modeIds = m.strSet("modeIds"),
+        today = m.bool("today", false),
+        done = m.bool("done", false),
+        doneAt = m.long("doneAt"),
+        createdAt = m.long("createdAt") ?: 0,
+        order = m.long("order") ?: 0,
+    )
+
+    // ---- prefs / daily / run / focus ----
     private fun prefsOut(p: Prefs) = mapOf(
         "use24h" to p.use24h, "waterTarget" to p.waterTarget, "glassMl" to p.glassMl, "mealNames" to p.mealNames,
         "breakIntervalMin" to p.breakIntervalMin, "textScale" to p.textScale, "highContrast" to p.highContrast,
         "reduceMotion" to p.reduceMotion, "keepScreenOn" to p.keepScreenOn, "fullscreen" to p.fullscreen,
         "nightDim" to p.nightDim, "dimModeIds" to p.dimModeIds.toList(), "sleepAudioUri" to p.sleepAudioUri,
+        "todayLimit" to p.todayLimit, "focusMin" to p.focusMin, "transitionWarnMin" to p.transitionWarnMin,
+        "chimeOnTransition" to p.chimeOnTransition, "calendarOn" to p.calendarOn,
     )
 
     private fun prefsIn(m: Map<*, *>): Prefs {
@@ -132,14 +166,20 @@ object Codec {
             keepScreenOn = m.bool("keepScreenOn", d.keepScreenOn),
             fullscreen = m.bool("fullscreen", d.fullscreen),
             nightDim = m.bool("nightDim", d.nightDim),
-            dimModeIds = (m["dimModeIds"] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: d.dimModeIds,
+            dimModeIds = if (m["dimModeIds"] is List<*>) m.strSet("dimModeIds") else d.dimModeIds,
             sleepAudioUri = m.str("sleepAudioUri") ?: "",
+            todayLimit = m.int("todayLimit", d.todayLimit).coerceIn(1, 10),
+            focusMin = m.int("focusMin", d.focusMin).coerceIn(5, 120),
+            transitionWarnMin = m.int("transitionWarnMin", d.transitionWarnMin).coerceIn(0, 60),
+            chimeOnTransition = m.bool("chimeOnTransition", d.chimeOnTransition),
+            calendarOn = m.bool("calendarOn", d.calendarOn),
         )
     }
 
     private fun dailyOut(d: Daily) = mapOf(
         "date" to d.date, "water" to d.water, "meals" to d.mealsDone.sorted(), "lastBreakAt" to d.lastBreakAt,
-        "prompted" to d.prompted.toList(), "dismissed" to d.dismissed.toList(),
+        "prompted" to d.prompted.toList(), "dismissed" to d.dismissed.toList(), "routinesDone" to d.routinesDone.toList(),
+        "focusDone" to d.focusDone, "warnedFor" to d.warnedFor,
     )
 
     private fun dailyIn(m: Map<*, *>) = Daily(
@@ -147,8 +187,11 @@ object Codec {
         water = m.int("water", 0).coerceIn(0, 99),
         mealsDone = (m["meals"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }?.toSet() ?: emptySet(),
         lastBreakAt = m.long("lastBreakAt"),
-        prompted = (m["prompted"] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet(),
-        dismissed = (m["dismissed"] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet(),
+        prompted = m.strSet("prompted"),
+        dismissed = m.strSet("dismissed"),
+        routinesDone = m.strSet("routinesDone"),
+        focusDone = m.int("focusDone", 0),
+        warnedFor = m.long("warnedFor"),
     )
 
     private fun runOut(r: RoutineRun) = mapOf(
@@ -166,12 +209,28 @@ object Codec {
         startedAt = m.long("startedAt") ?: 0,
     ) }
 
+    private fun focusOut(f: FocusSession) = mapOf(
+        "taskId" to f.taskId, "label" to f.label, "durationMs" to f.durationMs, "elapsedMs" to f.elapsedMs,
+        "runningSince" to f.runningSince, "finished" to f.finished, "startedAt" to f.startedAt,
+    )
+
+    private fun focusIn(m: Map<*, *>): FocusSession? {
+        val dur = m.long("durationMs") ?: return null
+        if (dur <= 0) return null
+        return FocusSession(
+            taskId = m.str("taskId"), label = m.str("label") ?: "Focus", durationMs = dur,
+            elapsedMs = m.long("elapsedMs") ?: 0, runningSince = m.long("runningSince"),
+            finished = m.bool("finished", false), startedAt = m.long("startedAt") ?: 0,
+        )
+    }
+
     // ---- defensive accessors ----
     private fun Map<*, *>.str(k: String) = this[k] as? String
     private fun Map<*, *>.int(k: String, def: Int) = (this[k] as? Number)?.toInt() ?: def
     private fun Map<*, *>.long(k: String) = (this[k] as? Number)?.toLong()
     private fun Map<*, *>.dbl(k: String) = (this[k] as? Number)?.toDouble()
     private fun Map<*, *>.bool(k: String, def: Boolean) = this[k] as? Boolean ?: def
+    private fun Map<*, *>.strSet(k: String) = (this[k] as? List<*>)?.mapNotNull { it as? String }?.toSet() ?: emptySet()
     private fun Map<*, *>.days(k: String) =
         (this[k] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }?.filter { it in 1..7 }?.toSet() ?: emptySet()
 }

@@ -44,13 +44,13 @@ class SmokeTest {
         rule.onNodeWithTag("dashboard").assertIsDisplayed()
         rule.onNodeWithTag("clock").assertIsDisplayed()
         rule.onNodeWithTag("modeChip").assertIsDisplayed()
-        rule.onNodeWithTag("waterCard").assertIsDisplayed()
+        rule.onNodeWithTag("waterCard").assertExists()
     }
 
     @Test
     fun waterIncrementPersists() {
-        rule.onNodeWithTag("addWater").performClick()
-        rule.onNodeWithTag("addWater").performClick()
+        rule.onNodeWithTag("addWater").performScrollTo().performClick()
+        rule.onNodeWithTag("addWater").performScrollTo().performClick()
         rule.waitForIdle()
         assertEquals(2, store.state.value.data.daily.water)
         waitForDisk { it.daily.water == 2 }
@@ -137,7 +137,7 @@ class SmokeTest {
 
     @Test
     fun resetCancelThenConfirm() {
-        rule.onNodeWithTag("addWater").performClick()
+        rule.onNodeWithTag("addWater").performScrollTo().performClick()
         rule.onNodeWithTag("settingsButton").performClick()
         rule.onNodeWithTag("settingsSection_RESET").performClick()
         rule.onNodeWithTag("resetButton").performScrollTo().performClick()
@@ -166,6 +166,53 @@ class SmokeTest {
         rule.onNodeWithTag("returnToSchedule").performClick()
         rule.waitForIdle()
         assertNull(store.state.value.data.override)
+    }
+
+    @Test
+    fun brainDumpGoesToInboxAndStarsIntoToday() {
+        rule.onNodeWithTag("captureButton").performClick()
+        rule.onNodeWithTag("captureDialog").assertExists()
+        rule.onNodeWithTag("captureField").performTextInput("Call the bank")
+        rule.onNodeWithTag("captureSave").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("captureDialog").assertDoesNotExist()
+        val t = store.state.value.data.tasks.single()
+        assertEquals("Call the bank", t.title)
+        waitForDisk { d -> d.tasks.any { it.title == "Call the bank" } }
+        rule.onNodeWithTag("openTasks").performScrollTo().performClick()
+        rule.onNodeWithTag("filter_inbox").performClick()
+        rule.onNodeWithTag("star_Call the bank").performClick()
+        rule.waitForIdle()
+        assertTrue(store.state.value.data.tasks.single().today)
+        rule.onNodeWithTag("closeTasks").performClick()
+        rule.onNodeWithTag("check_Call the bank").performScrollTo().performClick()
+        rule.waitForIdle()
+        assertTrue(store.state.value.data.tasks.single().done)
+    }
+
+    @Test
+    fun focusTimerStartsAndEndsWithTaskDone() {
+        rule.runOnUiThread { store.dispatch(Action.Capture("Write intro", today = true)) }
+        rule.waitForIdle()
+        rule.runOnUiThread { store.dispatch(Action.StartFocus(store.state.value.data.tasks.single().id, 25)) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("focusScreen").assertIsDisplayed()
+        rule.onNodeWithTag("focusPause").performClick()
+        rule.waitForIdle()
+        assertNull(store.state.value.data.focus!!.runningSince)
+        rule.onNodeWithTag("focusResume").performClick()
+        rule.onNodeWithTag("focusDoneEarly").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("dashboard").assertIsDisplayed()
+        assertNull(store.state.value.data.focus)
+        assertTrue(store.state.value.data.tasks.single().done)
+    }
+
+    @Test
+    fun nowCardAndHeadsUpRender() {
+        rule.onNodeWithTag("nowCard").assertIsDisplayed()
+        rule.onNodeWithTag("todayCard").assertExists()
+        rule.onNodeWithTag("doneToday").assertExists()
     }
 
     /** Persistence is async (background thread); poll the file like a cold start would read it. */

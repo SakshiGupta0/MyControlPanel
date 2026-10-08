@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -24,17 +26,6 @@ import app.mycontrolpanel.core.Action
 import app.mycontrolpanel.core.AppState
 import app.mycontrolpanel.core.Runner
 import kotlinx.coroutines.delay
-
-/** Things the UI needs from Android that are not app state. */
-interface Platform {
-    val versionName: String
-    fun openUri(uri: String): Boolean
-    fun openSpotify(): Boolean
-    fun notificationsAllowed(): Boolean
-    fun requestNotifications()
-}
-
-val LocalPlatform = staticCompositionLocalOf<Platform> { error("Platform not provided") }
 
 fun fmtTimer(ms: Long): String {
     val total = (ms + 999) / 1000
@@ -53,15 +44,20 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
         return
     }
 
-    Box(Modifier.fillMaxSize().background(p.bg).padding(horizontal = 48.dp, vertical = 32.dp).testTag("routineScreen")) {
+    val tint = LocalModeTint.current
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(lerpColor(tint, p.bg, 0.45f), p.bg2)))
+        .padding(horizontal = 48.dp, vertical = 32.dp).testTag("routineScreen")) {
         if (run.completed) {
             // Return automatically after a moment so the panel never gets stuck here.
             LaunchedEffect(run.startedAt) { delay(12_000); dispatch(Action.FinishRoutine) }
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                T("✓", Type.clock, p.accent)
+                Box(Modifier.size(150.dp).clip(PillShape).background(p.accentSoft), contentAlignment = Alignment.Center) {
+                    T("✓", Type.clock.copy(fontSize = 96.sp, lineHeight = 96.sp), p.accent)
+                }
+                Spacer(Modifier.height(20.dp))
                 T("${r.name} — done", Type.display, align = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
-                T("Nicely done. Back to your dashboard in a moment.", Type.body, p.muted)
+                T("You did the whole thing. Back to your dashboard in a moment.", Type.body, p.muted)
                 Spacer(Modifier.height(32.dp))
                 PrimaryButton("Back to dashboard", { dispatch(Action.FinishRoutine) }, Modifier.widthIn(min = 360.dp),
                     tag = "finishButton", tall = 80.dp, style = Type.heading)
@@ -88,26 +84,41 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
                 }
             }
 
-            // the one step
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                T(step.title, Type.display.copy(fontSize = 56.sp, lineHeight = 64.sp), align = TextAlign.Center, modifier = Modifier.testTag("stepTitle"))
-                if (step.instruction.isNotBlank()) {
-                    Spacer(Modifier.height(14.dp))
-                    T(step.instruction, Type.body.copy(fontSize = 26.sp, lineHeight = 36.sp), p.muted, align = TextAlign.Center)
-                }
-                if (remaining != null) {
-                    Spacer(Modifier.height(24.dp))
-                    val finished = remaining == 0L
-                    T(if (finished) "Time's up" else fmtTimer(remaining), Type.clock.copy(fontSize = 96.sp, lineHeight = 100.sp),
-                        if (finished) p.accent else p.text, modifier = Modifier.testTag("timer"))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        when {
-                            run.runningSince != null -> SecondaryButton("Pause", { dispatch(Action.RoutinePause) }, tag = "pauseTimer")
-                            finished -> SecondaryButton("Restart timer", { dispatch(Action.RoutineResume) })
-                            else -> SecondaryButton("Resume", { dispatch(Action.RoutineResume) }, tag = "resumeTimer")
-                        }
+            // the one step — words on the left, the visual (timer ring / breathing) on the right
+            Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                val visual = remaining != null || step.breathing
+                Column(Modifier.weight(1f), horizontalAlignment = if (visual) Alignment.Start else Alignment.CenterHorizontally) {
+                    T(step.title, Type.display.copy(fontSize = 56.sp, lineHeight = 64.sp), align = if (visual) TextAlign.Start else TextAlign.Center,
+                        modifier = Modifier.testTag("stepTitle"))
+                    if (step.instruction.isNotBlank()) {
+                        Spacer(Modifier.height(14.dp))
+                        T(step.instruction, Type.body.copy(fontSize = 26.sp, lineHeight = 36.sp), p.muted, align = if (visual) TextAlign.Start else TextAlign.Center)
                     }
-                    if (step.autoAdvance && !finished) T("Moves on automatically", Type.small, p.muted, Modifier.padding(top = 6.dp))
+                    if (remaining != null) {
+                        val finished = remaining == 0L
+                        Spacer(Modifier.height(20.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            when {
+                                run.runningSince != null -> SecondaryButton("Pause", { dispatch(Action.RoutinePause) }, tag = "pauseTimer")
+                                finished -> SecondaryButton("Restart timer", { dispatch(Action.RoutineResume) })
+                                else -> SecondaryButton("Resume", { dispatch(Action.RoutineResume) }, tag = "resumeTimer")
+                            }
+                        }
+                        if (step.autoAdvance && !finished) T("Moves on by itself when the time's up", Type.small, p.muted, Modifier.padding(top = 8.dp))
+                    }
+                }
+                if (step.breathing) {
+                    BreathingGuide(Modifier.size(300.dp))
+                } else if (remaining != null) {
+                    val total = step.durationSec * 1000L
+                    val finished = remaining == 0L
+                    Box(Modifier.size(300.dp), contentAlignment = Alignment.Center) {
+                        ProgressRing(remaining.toFloat() / total, Modifier.fillMaxSize(), stroke = 18.dp,
+                            color = if (finished) p.warm else p.accent, track = p.card.copy(alpha = 0.8f))
+                        T(if (finished) "Time's up" else fmtTimer(remaining),
+                            if (finished) Type.title else Type.clock.copy(fontSize = 76.sp, lineHeight = 80.sp),
+                            if (finished) p.warm else p.text, modifier = Modifier.testTag("timer"))
+                    }
                 }
             }
 

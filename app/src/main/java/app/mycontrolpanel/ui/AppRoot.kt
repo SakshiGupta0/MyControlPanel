@@ -54,6 +54,7 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
         val kind = when (s.ui.screen) {
             Screen.Dashboard -> "dashboard"; Screen.RunningRoutine -> "routine"
             is Screen.Settings -> "settings"; is Screen.ModeEditor -> "modeEditor"; is Screen.RoutineEditor -> "routineEditor"
+            is Screen.Tasks -> "tasks"; Screen.Focus -> "focus"
         }
         AnimatedContent(targetState = kind, label = "screen",
             transitionSpec = { if (reduceMotion) fadeIn(tween(0)) togetherWith fadeOut(tween(0)) else fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }
@@ -65,6 +66,8 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
                 is Screen.Settings -> if (k == "settings") SettingsScreen(s, sc.section, dispatch)
                 is Screen.ModeEditor -> if (k == "modeEditor") ModeEditor(s, sc, dispatch)
                 is Screen.RoutineEditor -> if (k == "routineEditor") RoutineEditor(s, sc, dispatch)
+                is Screen.Tasks -> if (k == "tasks") TasksScreen(s, sc.filter, env, dispatch)
+                Screen.Focus -> if (k == "focus") FocusScreen(s, dispatch)
             }
         }
 
@@ -83,6 +86,8 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
             is Dialog.ConfirmDeleteRoutine -> ConfirmDialog("Delete “${s.data.routines.find { it.id == dl.id }?.name ?: "routine"}”?",
                 "Its steps will be gone for good.", "Delete", { dispatch(Action.ConfirmDelete) }, { dispatch(Action.CloseDialog) }, danger = true)
             is Dialog.StepEditor -> StepEditorDialog(dl.index, dl.step, dispatch)
+            Dialog.Capture -> CaptureDialog(s, dispatch)
+            is Dialog.TaskEditor -> TaskEditorDialog(s, dl.task, dl.isNew, dispatch)
         }
 
         s.ui.message?.let { msg ->

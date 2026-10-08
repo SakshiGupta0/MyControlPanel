@@ -139,6 +139,24 @@ object Scheduler {
         return null
     }
 
+    /** When the current schedule block began (latest boundary at/before [from] where the result changed). */
+    fun currentBlockStart(modes: List<Mode>, from: LocalDateTime): LocalDateTime? {
+        val current = resolve(modes, from)
+        val boundaryMinutes = modes.filter { it.scheduled }.flatMap { listOf(it.start, it.end) }.toSortedSet()
+        if (boundaryMinutes.isEmpty()) return null
+        val candidates = ArrayList<LocalDateTime>()
+        for (d in 0..8) {
+            val date = from.toLocalDate().minusDays(d.toLong())
+            for (m in boundaryMinutes) {
+                val t = date.atStartOfDay().plusMinutes(m.toLong())
+                if (!t.isAfter(from)) candidates += t
+            }
+        }
+        candidates.sortDescending()
+        for (t in candidates) if (!sameResult(resolve(modes, t.minusMinutes(1)), current)) return t
+        return null
+    }
+
     fun sameResult(a: ScheduleResult, b: ScheduleResult): Boolean = when {
         a is ScheduleResult.Active && b is ScheduleResult.Active -> a.mode.id == b.mode.id
         a is ScheduleResult.Conflict && b is ScheduleResult.Conflict -> a.modes.map { it.id }.toSet() == b.modes.map { it.id }.toSet()

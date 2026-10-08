@@ -16,6 +16,23 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
+import android.database.ContentObserver
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
+import android.provider.CalendarContract
+import android.provider.Settings
+import android.speech.RecognizerIntent
+import android.view.KeyEvent
+import app.mycontrolpanel.core.CalendarStatus
+import app.mycontrolpanel.core.modeOrNull
+import app.mycontrolpanel.system.CalendarSource
+import app.mycontrolpanel.system.MediaWatcher
+import app.mycontrolpanel.ui.MediaKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -62,6 +79,61 @@ class MainActivity : ComponentActivity() {
         override fun requestNotifications() {
             if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        override fun calendarAllowed(): Boolean = CalendarSource.allowed(this@MainActivity)
+        override fun requestCalendar() = calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+        override fun media(key: MediaKey) {
+            val code = when (key) {
+                MediaKey.PLAY_PAUSE -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                MediaKey.NEXT -> KeyEvent.KEYCODE_MEDIA_NEXT
+                MediaKey.PREVIOUS -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            }
+            mediaWatcher.control(code)
+        }
+        override fun openMediaAccessSettings() {
+            runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                .onFailure { store.dispatch(Action.ShowMessage("Open Settings → Notifications → Device & app notifications to allow it.")) }
+        }
+        override val voiceAvailable: Boolean
+            get() = packageManager.queryIntentActivities(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
+        override fun listen(onText: (String) -> Unit) {
+            voiceCallback = onText
+            val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it — I'll write it down")
+            runCatching { voiceLauncher.launch(i) }.onFailure { store.dispatch(Action.ShowMessage("Voice input isn't available on this tablet.")) }
+        }
+    }
+
+    private val calendarPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) store.dispatch(Action.ShowMessage("Calendar stays hidden. You can allow it later in Settings → Calendar."))
+        reloadCalendar()
+    }
+
+    private var voiceCallback: ((String) -> Unit)? = null
+    private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val text = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (res.resultCode == RESULT_OK && !text.isNullOrBlank()) voiceCallback?.invoke(text)
+        voiceCallback = null
+    }
+
+    private val mediaWatcher by lazy { MediaWatcher(this) { np, access -> store.dispatch(Action.MediaChanged(np, access)) } }
+
+    private val calendarObserver by lazy {
+        object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) = reloadCalendar()
+        }
+    }
+
+    /** Loads yesterday → +2 days in the background, then hands the result to the store. */
+    private fun reloadCalendar() {
+        if (!store.state.value.data.prefs.calendarOn) {
+            store.dispatch(Action.CalendarLoaded(emptyList(), CalendarStatus.OFF)); return
+        }
+        lifecycleScope.launch {
+            val now = System.currentTimeMillis()
+            val (status, events) = withContext(Dispatchers.IO) { CalendarSource.load(this@MainActivity, now - 86_400_000L, now + 2 * 86_400_000L) }
+            store.dispatch(Action.CalendarLoaded(events, status))
+        }
     }
 
     private var fullscreen = true
@@ -88,8 +160,10 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette) {
                 applyWindow(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette.bg.toArgb())
             }
+            LaunchedEffect(prefs.calendarOn) { reloadCalendar() }
+            val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
             CompositionLocalProvider(LocalPlatform provides platform) {
-                PanelTheme(palette, prefs.textScale, prefs.reduceMotion) {
+                PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
                     AppRoot(s, env, store::dispatch)
                 }
             }
@@ -100,7 +174,7 @@ class MainActivity : ComponentActivity() {
                 // Clock: once per second while a routine timer runs, otherwise once per minute (on the minute).
                 // Only while visible, so no polling with the screen off; resumes immediately after sleep.
                 launch {
-                    store.state.map { it.data.run?.runningSince != null }.distinctUntilChanged().collectLatest { fast ->
+                    store.state.map { it.data.run?.runningSince != null || it.data.focus?.runningSince != null }.distinctUntilChanged().collectLatest { fast ->
                         while (true) {
                             store.dispatch(Action.Tick)
                             val now = System.currentTimeMillis()
@@ -110,8 +184,26 @@ class MainActivity : ComponentActivity() {
                 }
                 launch {
                     store.effects.collect { e ->
-                        if (e is Effect.PlayAlert) playAlert()
+                        when (e) {
+                            Effect.PlayAlert -> playAlert()
+                            Effect.Chime -> playChime()
+                            else -> {}
+                        }
                     }
+                }
+                // Calendar: refresh on start, when the calendar changes, and every 5 minutes as a fallback.
+                launch {
+                    if (CalendarSource.allowed(this@MainActivity)) runCatching {
+                        contentResolver.registerContentObserver(CalendarContract.CONTENT_URI, true, calendarObserver)
+                    }
+                    try {
+                        while (true) { reloadCalendar(); delay(5 * 60_000L) }
+                    } finally { runCatching { contentResolver.unregisterContentObserver(calendarObserver) } }
+                }
+                // Music: watch what's playing while visible.
+                launch {
+                    mediaWatcher.start()
+                    try { awaitCancellation() } finally { mediaWatcher.stop() }
                 }
             }
         }
@@ -158,6 +250,15 @@ class MainActivity : ComponentActivity() {
         val ctl = WindowCompat.getInsetsController(window, window.decorView)
         ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         ctl.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    /** Soft two-note chime at low volume for the mode-change heads-up. */
+    private fun playChime() {
+        try {
+            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 35)
+            tg.startTone(ToneGenerator.TONE_PROP_ACK, 400)
+            Handler(Looper.getMainLooper()).postDelayed({ tg.release() }, 800)
+        } catch (_: Exception) { }
     }
 
     private fun playAlert() {

@@ -77,6 +77,7 @@ fun ModeEditor(s: AppState, ed: Screen.ModeEditor, dispatch: Dispatch) {
         left = {
             PanelTextField(m.name, { set(m.copy(name = it)) }, "Name", tag = "modeNameField")
             T("Icon", Type.label, p.muted); IconPicker(m.icon) { set(m.copy(icon = it)) }
+            T("Colour", Type.label, p.muted); TintSwatches(m.tint) { set(m.copy(tint = it)) }
             PanelCard(Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     ToggleRow("Runs on schedule", m.scheduled, { set(m.copy(scheduled = it)) },
@@ -109,7 +110,7 @@ fun ModeEditor(s: AppState, ed: Screen.ModeEditor, dispatch: Dispatch) {
             PanelCard(Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     T("Dashboard widgets", Type.heading)
-                    T("Water, meals, clock and calendar are always shown. Choose and order the rest:", Type.small, p.muted)
+                    T("Clock, Right now, today's list, water and meals are always shown. Choose and order the rest:", Type.small, p.muted)
                     m.widgets.forEachIndexed { i, slot ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -290,6 +291,7 @@ fun StepEditorDialog(index: Int?, st: Step, dispatch: Dispatch) {
                     ToggleRow("Move on automatically", st.autoAdvance, { set(st.copy(autoAdvance = it)) }, sub = "Go to the next step when the timer ends")
                     ToggleRow("Sound when time's up", st.alert, { set(st.copy(alert = it)) })
                 }
+                ToggleRow("Breathing guide", st.breathing, { set(st.copy(breathing = it)) }, sub = "Shows a slow breathing circle on this step")
                 if (problem != null) T(problem, Type.small, p.warn)
             }
         },

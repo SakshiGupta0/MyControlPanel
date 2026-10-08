@@ -14,29 +14,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mycontrolpanel.core.Action
 import app.mycontrolpanel.core.AppState
+import app.mycontrolpanel.core.CalEvent
+import app.mycontrolpanel.core.CalendarStatus
 import app.mycontrolpanel.core.Derive
 import app.mycontrolpanel.core.Dialog
 import app.mycontrolpanel.core.Effective
 import app.mycontrolpanel.core.Env
+import app.mycontrolpanel.core.Focus
 import app.mycontrolpanel.core.Mode
 import app.mycontrolpanel.core.ModeWidget
+import app.mycontrolpanel.core.NowItem
 import app.mycontrolpanel.core.Routine
-import app.mycontrolpanel.core.Scheduler
 import app.mycontrolpanel.core.ScheduleResult
+import app.mycontrolpanel.core.Scheduler
 import app.mycontrolpanel.core.SettingsSection
+import app.mycontrolpanel.core.TaskFilter
 import app.mycontrolpanel.core.modeOrNull
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -62,59 +70,90 @@ fun inText(minutes: Long): String = when {
     else -> "in ${minutes / 60} h ${minutes % 60} min"
 }
 
+fun durText(minutes: Long): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes % 60 == 0L -> "${minutes / 60} h"
+    else -> "${minutes / 60} h ${minutes % 60} min"
+}
+
+fun resultLabel(r: ScheduleResult) = when (r) {
+    is ScheduleResult.Active -> "${r.mode.icon} ${r.mode.name}"
+    is ScheduleResult.Conflict -> "a schedule conflict"
+    ScheduleResult.Free -> "free time"
+}
+
 @Composable
 fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
-    val eff = Derive.effective(s, env)
-    val mode = eff.modeOrNull()
-    val prefs = s.data.prefs
-    val local = Scheduler.toLocal(s.now, env.zone)
-    val (time, ampm) = clockText(s.now, env, prefs.use24h)
-
-    Row(Modifier.fillMaxSize().background(p.bg).padding(horizontal = 36.dp, vertical = 28.dp).testTag("dashboard"),
-        horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-
-        // ---------------- left: time, mode, featured routine ----------------
-        Column(Modifier.weight(0.43f).fillMaxHeight()) {
-            ModeHeader(eff, s, env, dispatch)
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                T(time, Type.clock, modifier = Modifier.testTag("clock"))
-                if (ampm != null) T(ampm, Type.title, p.muted, Modifier.padding(start = 10.dp, bottom = 20.dp))
-            }
-            T(local.format(DATE_FMT), Type.title, p.muted)
-            Spacer(Modifier.weight(1f))
-            FeaturedCard(eff, s, dispatch)
-            Spacer(Modifier.height(18.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                PrimaryButton("✦  Quick routines", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) },
-                    Modifier.weight(1f), tag = "quickRoutinesButton", tall = 64.dp, style = Type.heading)
+    Row(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2)))
+            .padding(horizontal = 32.dp, vertical = 24.dp).testTag("dashboard"),
+        horizontalArrangement = Arrangement.spacedBy(28.dp),
+    ) {
+        // ---------------- left: where am I in the day + the one thing ----------------
+        Column(Modifier.weight(0.44f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            TimePanel(s, env, dispatch, Modifier.fillMaxWidth().weight(1f))
+            NowCard(s, env, dispatch)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PrimaryButton("＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
+                    tag = "captureButton", tall = 64.dp, style = Type.heading)
+                SecondaryButton("✦  Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) }, Modifier.heightIn(min = 64.dp), tag = "quickRoutinesButton")
                 RoundIconButton("⚙", { dispatch(Action.OpenSettings(SettingsSection.MODES)) }, size = 64.dp, tag = "settingsButton")
             }
         }
 
-        // ---------------- right: alerts + widgets ----------------
-        Column(Modifier.weight(0.57f).fillMaxHeight().verticalScroll(rememberScrollState()),
+        // ---------------- right: today, body basics, this mode ----------------
+        Column(Modifier.weight(0.56f).fillMaxHeight().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Banners(s, eff, env, dispatch)
+            Banners(s, env, dispatch)
+            TodayCard(s, env, dispatch)
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 WaterCard(s, dispatch, Modifier.weight(1f).fillMaxHeight())
                 MealsCard(s, dispatch, Modifier.weight(1f).fillMaxHeight())
-                CalendarCard(Modifier.weight(1f).fillMaxHeight())
+                DoneTodayCard(s, env, Modifier.weight(0.8f).fillMaxHeight())
             }
+            val mode = Derive.effective(s, env).modeOrNull()
             if (mode != null) {
-                val slots = mode.widgets.filter { it.enabled }.map { it.widget }
-                slots.chunked(2).forEach { row ->
+                mode.widgets.filter { it.enabled }.map { it.widget }.chunked(2).forEach { row ->
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         row.forEach { w -> ModeWidgetCard(w, mode, s, env, dispatch, Modifier.weight(1f).fillMaxHeight()) }
                         if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
-            T("My Control Panel · v${LocalPlatform.current.versionName}", Type.small, p.muted.copy(alpha = 0.6f), Modifier.padding(top = 4.dp))
+            Overwhelmed(s, dispatch)
+            T("My Control Panel · v${LocalPlatform.current.versionName}", Type.small, p.muted.copy(alpha = 0.55f))
         }
     }
 }
+
+/** The big tinted panel: mode, clock, date, next event, time left. */
+@Composable
+private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modifier) {
+    val p = P()
+    val tint = LocalModeTint.current
+    val eff = Derive.effective(s, env)
+    val prefs = s.data.prefs
+    val (time, ampm) = clockText(s.now, env, prefs.use24h)
+    Column(
+        modifier.clip(RoundedCornerShape(36.dp))
+            .background(Brush.linearGradient(listOf(tint, lerpColor(tint, p.bg, 0.55f))))
+            .padding(horizontal = 30.dp, vertical = 24.dp),
+    ) {
+        ModeHeader(eff, s, env, dispatch)
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.Bottom) {
+            T(time, Type.clock, modifier = Modifier.testTag("clock"))
+            if (ampm != null) T(ampm, Type.title, p.muted, Modifier.padding(start = 10.dp, bottom = 22.dp))
+        }
+        T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), Type.title, p.text.copy(alpha = 0.75f))
+        NextEventLine(s, env)
+        Spacer(Modifier.weight(1f))
+        TimeLeftBar(s, env, eff)
+    }
+}
+
+fun lerpColor(a: Color, b: Color, t: Float) = androidx.compose.ui.graphics.lerp(a, b, t)
 
 @Composable
 private fun ModeHeader(eff: Effective, s: AppState, env: Env, dispatch: Dispatch) {
@@ -123,74 +162,115 @@ private fun ModeHeader(eff: Effective, s: AppState, env: Env, dispatch: Dispatch
         is Effective.Scheduled -> eff.mode.icon to eff.mode.name
         is Effective.Overridden -> eff.mode.icon to eff.mode.name
         is Effective.Conflict -> "⚠️" to "Schedule conflict"
-        Effective.Free -> "○" to "No mode scheduled"
+        Effective.Free -> "○" to "Free time"
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            Modifier.clip(PillShape).background(p.accentSoft).clickable { dispatch(Action.OpenDialog(Dialog.ModeSwitcher)) }
+            Modifier.clip(PillShape).background(p.card.copy(alpha = if (p.dark) 0.9f else 0.75f))
+                .clickable { dispatch(Action.OpenDialog(Dialog.ModeSwitcher)) }
                 .heightIn(min = 56.dp).padding(horizontal = 22.dp, vertical = 10.dp).testTag("modeChip"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            T(icon, Type.heading)
-            Spacer(Modifier.width(10.dp))
-            T(name, Type.heading, modifier = Modifier.testTag("modeName"))
-            Spacer(Modifier.width(10.dp))
+            T(icon, Type.heading); Spacer(Modifier.width(10.dp))
+            T(name, Type.heading, modifier = Modifier.testTag("modeName")); Spacer(Modifier.width(10.dp))
             T("▾", Type.label, p.muted)
         }
-        if (eff is Effective.Overridden) {
-            QuietButton("Back to schedule", { dispatch(Action.ReturnToSchedule) }, tag = "returnToSchedule")
-        }
-    }
-    val sub = when (eff) {
-        is Effective.Overridden -> "Manual · " + (eff.until?.let { "until ${shortTime(it, env, s.data.prefs.use24h)}" } ?: "until you switch back")
-        else -> Derive.nextChange(s, env)?.let { (t, r) ->
-            val mins = (Scheduler.toEpoch(t, env.zone) - s.now) / 60_000
-            val what = when (r) {
-                is ScheduleResult.Active -> "${r.mode.icon} ${r.mode.name}"
-                is ScheduleResult.Conflict -> "a conflict"
-                ScheduleResult.Free -> "free time"
-            }
-            "Next: $what at ${shortTime(Scheduler.toEpoch(t, env.zone), env, s.data.prefs.use24h)} (${inText(mins)})"
-        }
-    }
-    if (sub != null) T(sub, Type.label, p.muted, Modifier.padding(top = 10.dp, start = 6.dp))
-}
-
-@Composable
-private fun FeaturedCard(eff: Effective, s: AppState, dispatch: Dispatch) {
-    val p = P()
-    val mode = eff.modeOrNull()
-    val r = Derive.featured(s, mode)
-    PanelCard(Modifier.fillMaxWidth(), strong = true, padding = 26.dp) {
-        if (r == null) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                T(if (mode == null) "Pick a mode to see its routine" else "No featured routine for ${mode.name}", Type.heading)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (mode == null) SecondaryButton("Choose a mode", { dispatch(Action.OpenDialog(Dialog.ModeSwitcher)) })
-                    else SecondaryButton("Choose one", { dispatch(Action.EditMode(mode.id)) })
-                }
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    T("FEATURED", Type.small.copy(letterSpacing = androidx.compose.ui.unit.TextUnit(2f, androidx.compose.ui.unit.TextUnitType.Sp)), p.muted)
-                    T("${r.icon}  ${r.name}", Type.title)
-                    val mins = routineMinutes(r)
-                    T(listOfNotNull(r.description.ifBlank { null }, "${r.steps.size} steps" + if (mins > 0) " · ~$mins min" else "").joinToString(" · "),
-                        Type.label, p.muted)
-                }
-                Spacer(Modifier.width(16.dp))
-                PrimaryButton("Start", { dispatch(Action.StartRoutine(r.id)) }, tag = "featuredStart", tall = 64.dp, style = Type.heading)
-            }
-        }
+        if (eff is Effective.Overridden) QuietButton("Back to schedule", { dispatch(Action.ReturnToSchedule) }, tag = "returnToSchedule")
     }
 }
 
 @Composable
-private fun Banners(s: AppState, eff: Effective, env: Env, dispatch: Dispatch) {
+private fun NextEventLine(s: AppState, env: Env) {
     val p = P()
+    if (s.live.calendarStatus != CalendarStatus.OK) return
+    val cur = Derive.currentEvent(s)
+    val next = Derive.nextEvent(s, env)
+    val text = when {
+        cur != null -> "Now: ${cur.title} · until ${shortTime(cur.end, env, s.data.prefs.use24h)}"
+        next != null -> "Next: ${next.title} · ${shortTime(next.begin, env, s.data.prefs.use24h)} (${inText((next.begin - s.now) / 60_000)})"
+        else -> "No more events today"
+    }
+    T("📅  $text", Type.label, p.text.copy(alpha = 0.8f), Modifier.padding(top = 10.dp).testTag("nextEvent"), maxLines = 1)
+}
+
+/** Time-blindness aid: how much of this mode is left, as words and a bar. */
+@Composable
+private fun TimeLeftBar(s: AppState, env: Env, eff: Effective) {
+    val p = P()
+    val mode = eff.modeOrNull() ?: return
+    val w = Derive.modeWindow(s, env)
+    if (w == null) {
+        if (eff is Effective.Overridden) T("${mode.name} until you switch back", Type.label, p.muted)
+        return
+    }
+    val (start, end) = w
+    val leftMin = ((end - s.now) / 60_000).coerceAtLeast(0)
+    val frac = ((s.now - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("timeLeft")) {
+        T("${durText(leftMin)} left in ${mode.name}", Type.label, p.text.copy(alpha = 0.8f))
+        Box(Modifier.fillMaxWidth().height(10.dp).clip(PillShape).background(p.card.copy(alpha = 0.7f))) {
+            Box(Modifier.fillMaxWidth(frac).height(10.dp).clip(PillShape).background(p.accent.copy(alpha = 0.85f)))
+        }
+    }
+}
+
+/** One decision at a time: the single most useful next thing. */
+@Composable
+private fun NowCard(s: AppState, env: Env, dispatch: Dispatch) {
+    val p = P()
+    val item = Derive.now(s, env)
+    PanelCard(Modifier.fillMaxWidth().testTag("nowCard"), padding = 24.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Eyebrow("Right now", p.accent)
+            when (item) {
+                is NowItem.FocusActive -> {
+                    val left = Focus.remaining(item.focus, s.now) / 60_000
+                    NowBody(item.focus.label, if (item.focus.finished) "Focus time's up" else "Focusing · $left min left") {
+                        PrimaryButton("Return", { dispatch(Action.ShowFocus) }, tag = "nowAction")
+                    }
+                }
+                is NowItem.Prompt -> NowBody("${item.routine.icon}  ${item.routine.name}", "It's time for this") {
+                    QuietButton("Not now", { dispatch(Action.DismissPrompt(item.routine.id)) }, color = p.muted)
+                    PrimaryButton("Start", { dispatch(Action.StartRoutine(item.routine.id)) }, tag = "nowAction")
+                }
+                is NowItem.Spotlight -> NowBody(item.task.title, "Just this one. Nothing else.") {
+                    QuietButton("Pick another", { dispatch(Action.PickOne) }, color = p.muted)
+                    SecondaryButton("Focus ${s.data.prefs.focusMin}m", { dispatch(Action.StartFocus(item.task.id)) })
+                    PrimaryButton("Done ✓", { dispatch(Action.ToggleTaskDone(item.task.id)) }, tag = "nowAction")
+                }
+                is NowItem.Featured -> {
+                    val mins = routineMinutes(item.routine)
+                    NowBody("${item.routine.icon}  ${item.routine.name}", "${item.routine.steps.size} small steps" + if (mins > 0) " · about $mins min" else "") {
+                        PrimaryButton("Start", { dispatch(Action.StartRoutine(item.routine.id)) }, tag = "featuredStart", tall = 60.dp, style = Type.heading)
+                    }
+                }
+                is NowItem.TodayTask -> NowBody(item.task.title, "First on today's list") {
+                    SecondaryButton("Focus ${s.data.prefs.focusMin}m", { dispatch(Action.StartFocus(item.task.id)) })
+                    PrimaryButton("Done ✓", { dispatch(Action.ToggleTaskDone(item.task.id)) }, tag = "nowAction")
+                }
+                NowItem.Rest -> NowBody("You're all caught up", "Nothing urgent. Rest is allowed.") {
+                    SecondaryButton("Pick one for me", { dispatch(Action.PickOne) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowBody(title: String, sub: String, actions: @Composable () -> Unit) {
+    val p = P()
+    T(title, Type.display, maxLines = 2, modifier = Modifier.testTag("nowTitle"))
+    T(sub, Type.label, p.muted)
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) { actions() }
+}
+
+@Composable
+private fun Banners(s: AppState, env: Env, dispatch: Dispatch) {
+    val p = P()
+    val eff = Derive.effective(s, env)
     s.ui.saveError?.let { err ->
-        PanelCard(Modifier.fillMaxWidth().testTag("saveErrorBanner")) {
+        PanelCard(Modifier.fillMaxWidth().testTag("saveErrorBanner"), tint = p.warmSoft) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T("⚠️  $err", Type.label, p.danger, Modifier.weight(1f))
                 PrimaryButton("Retry", { dispatch(Action.RetrySave) })
@@ -198,24 +278,32 @@ private fun Banners(s: AppState, eff: Effective, env: Env, dispatch: Dispatch) {
         }
     }
     if (eff is Effective.Conflict) {
-        PanelCard(Modifier.fillMaxWidth().testTag("conflictBanner")) {
+        PanelCard(Modifier.fillMaxWidth().testTag("conflictBanner"), tint = p.warmSoft) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                T("Two modes are scheduled right now", Type.heading)
-                T("Pick one for now, and fix the schedule in Settings → Modes so it doesn't happen again.", Type.label, p.muted)
+                T("Two modes want this time", Type.heading)
+                T("Pick one for now. Fix the schedule later in Settings → Modes.", Type.label, p.muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     eff.modes.forEach { m -> SecondaryButton("${m.icon} ${m.name}", { dispatch(Action.PickConflictMode(m.id)) }) }
-                    QuietButton("Fix schedule", { dispatch(Action.OpenSettings(SettingsSection.MODES)) })
                 }
             }
         }
     }
-    Derive.prompts(s, env).forEach { r ->
+    Derive.transitionSoon(s, env)?.let { (mins, next) ->
+        PanelCard(Modifier.fillMaxWidth().testTag("headsUp"), tint = p.warmSoft) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T("⏳", Type.title, modifier = Modifier.padding(end = 14.dp))
+                Column(Modifier.weight(1f)) {
+                    T("${resultLabel(next)} ${inText(mins)}", Type.heading)
+                    T("Start wrapping up — finish the sentence, not the chapter.", Type.label, p.muted)
+                }
+            }
+        }
+    }
+    // Further routine prompts (the first one is on the Now card).
+    Derive.prompts(s, env).drop(1).forEach { r ->
         PanelCard(Modifier.fillMaxWidth().testTag("prompt_${r.id}")) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) {
-                    T("It's time for", Type.small, p.muted)
-                    T("${r.icon}  ${r.name}", Type.heading)
-                }
+                T("${r.icon}  ${r.name}", Type.heading, modifier = Modifier.weight(1f))
                 QuietButton("Not now", { dispatch(Action.DismissPrompt(r.id)) }, color = p.muted)
                 PrimaryButton("Start", { dispatch(Action.StartRoutine(r.id)) })
             }
@@ -224,7 +312,47 @@ private fun Banners(s: AppState, eff: Effective, env: Env, dispatch: Dispatch) {
 }
 
 @Composable
-private fun WidgetTitle(text: String) = T(text.uppercase(), Type.small.copy(letterSpacing = androidx.compose.ui.unit.TextUnit(1.5f, androidx.compose.ui.unit.TextUnitType.Sp)), P().muted)
+private fun TodayCard(s: AppState, env: Env, dispatch: Dispatch) {
+    val p = P()
+    val list = Derive.tasksFor(s, TaskFilter.TODAY, env)
+    PanelCard(Modifier.fillMaxWidth().testTag("todayCard")) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow("Today's ${s.data.prefs.todayLimit}", modifier = Modifier.weight(1f))
+                QuietButton("Pick one for me", { dispatch(Action.PickOne) }, tag = "pickOne")
+                QuietButton("All tasks →", { dispatch(Action.OpenTasks(TaskFilter.TODAY)) }, tag = "openTasks")
+            }
+            if (list.isEmpty()) {
+                T("Choose up to ${s.data.prefs.todayLimit} things for today. Small lists get done.", Type.body, p.muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    SecondaryButton("Choose from my tasks", { dispatch(Action.OpenTasks(TaskFilter.ALL)) })
+                }
+            }
+            list.forEach { t -> TaskRow(t, s, dispatch, compact = true) }
+        }
+    }
+}
+
+@Composable
+fun TaskRow(t: app.mycontrolpanel.core.Task, s: AppState, dispatch: Dispatch, compact: Boolean = false) {
+    val p = P()
+    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag("task_${t.title}"), verticalAlignment = Alignment.CenterVertically) {
+        CheckCircle(t.done, { dispatch(Action.ToggleTaskDone(t.id)) }, tag = "check_${t.title}")
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { dispatch(Action.EditTask(t.id)) }.padding(vertical = 6.dp)) {
+            T(t.title, Type.body, if (t.done) p.muted else p.text, maxLines = 2)
+            if (!compact) {
+                val modes = t.modeIds.mapNotNull { id -> s.data.modes.find { it.id == id }?.let { "${it.icon} ${it.name}" } }
+                val bits = listOfNotNull(modes.takeIf { it.isNotEmpty() }?.joinToString(" · "), t.notes.takeIf { it.isNotBlank() })
+                if (bits.isNotEmpty()) T(bits.joinToString("  ·  "), Type.small, p.muted, maxLines = 1)
+            }
+        }
+        if (!t.done) {
+            if (!compact) QuietButton(if (t.today) "★" else "☆", { dispatch(Action.ToggleToday(t.id)) }, tag = "star_${t.title}", color = if (t.today) p.warm else p.muted)
+            QuietButton("Focus", { dispatch(Action.StartFocus(t.id)) }, color = p.accent)
+        }
+    }
+}
 
 @Composable
 private fun WaterCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
@@ -232,21 +360,21 @@ private fun WaterCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val prefs = s.data.prefs
     val n = s.data.daily.water
     PanelCard(modifier.testTag("waterCard")) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            WidgetTitle("Water")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Eyebrow("Water")
             Row(verticalAlignment = Alignment.Bottom) {
                 T("$n", Type.display, modifier = Modifier.testTag("waterCount"))
-                T(" / ${prefs.waterTarget} glasses", Type.label, p.muted, Modifier.padding(bottom = 8.dp))
+                T(" / ${prefs.waterTarget}", Type.label, p.muted, Modifier.padding(bottom = 8.dp))
             }
-            LinearProgressIndicator(
-                progress = { (n.toFloat() / prefs.waterTarget).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(10.dp).clip(PillShape),
-                color = p.accent, trackColor = p.cardStrong, drawStopIndicator = {},
-            )
-            T("${n * prefs.glassMl} ml", Type.small, p.muted)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // one drop per glass — easier to "see" than a number
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(prefs.waterTarget.coerceAtMost(12)) { i ->
+                    Box(Modifier.weight(1f).height(14.dp).clip(RoundedCornerShape(7.dp)).background(if (i < n) p.accent else p.cardStrong))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("+ Glass", { dispatch(Action.AddWater(1)) }, Modifier.weight(1f), tag = "addWater")
-                RoundIconButton("−", { dispatch(Action.AddWater(-1)) }, enabled = n > 0, tag = "removeWater")
+                RoundIconButton("−", { dispatch(Action.AddWater(-1)) }, enabled = n > 0, tag = "removeWater", size = 48.dp)
             }
         }
     }
@@ -257,18 +385,19 @@ private fun MealsCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val p = P()
     val names = s.data.prefs.mealNames
     val done = s.data.daily.mealsDone
-    val next = names.indices.firstOrNull { it !in done }
     PanelCard(modifier.testTag("mealsCard")) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            WidgetTitle("Meals")
-            T(if (next == null) "All eaten 🎉" else "Next: ${names[next]}", Type.heading)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Eyebrow("Meals")
             names.forEachIndexed { i, name ->
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
-                        .clickable { dispatch(Action.ToggleMeal(i)) }.padding(horizontal = 4.dp).testTag("meal_$i"),
+                    Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(RoundedCornerShape(12.dp))
+                        .clickable { dispatch(Action.ToggleMeal(i)) }.testTag("meal_$i"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.width(30.dp)) { T(if (i in done) "✓" else "○", Type.heading, if (i in done) p.accent else p.muted) }
+                    Box(Modifier.size(30.dp).clip(PillShape).background(if (i in done) p.accent else p.cardStrong), contentAlignment = Alignment.Center) {
+                        if (i in done) T("✓", Type.small, p.onAccent)
+                    }
+                    Spacer(Modifier.width(12.dp))
                     T(name, Type.label, if (i in done) p.muted else p.text)
                 }
             }
@@ -276,15 +405,31 @@ private fun MealsCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     }
 }
 
+/** Gentle tally — no streaks, no scores, never shows a zero as failure. */
 @Composable
-private fun CalendarCard(modifier: Modifier) {
+private fun DoneTodayCard(s: AppState, env: Env, modifier: Modifier) {
     val p = P()
-    PanelCard(modifier.testTag("calendarCard")) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            WidgetTitle("Calendar")
-            T("Not connected yet", Type.heading)
-            T("Google Calendar arrives in the next build. Your events will show here.", Type.label, p.muted)
+    val n = Derive.doneTodayCount(s, env)
+    PanelCard(modifier.testTag("doneToday"), tint = p.warmSoft) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Eyebrow("Done today", p.warm)
+            T(if (n == 0) "✿" else "$n", Type.display, p.warm)
+            T(if (n == 0) "The day's still young." else if (n == 1) "thing finished" else "things finished", Type.small, p.muted)
         }
+    }
+}
+
+@Composable
+private fun Overwhelmed(s: AppState, dispatch: Dispatch) {
+    val p = P()
+    val calm = s.data.routines.find { it.id == "r_calm_down" && it.enabled } ?: return
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { dispatch(Action.StartRoutine(calm.id)) }
+            .padding(vertical = 14.dp, horizontal = 6.dp).testTag("overwhelmed"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        T("🫧", Type.heading); Spacer(Modifier.width(12.dp))
+        T("Feeling overwhelmed? Take two minutes to breathe →", Type.label, p.muted)
     }
 }
 
@@ -292,66 +437,129 @@ private fun CalendarCard(modifier: Modifier) {
 private fun ModeWidgetCard(w: ModeWidget, mode: Mode, s: AppState, env: Env, dispatch: Dispatch, modifier: Modifier) {
     val p = P()
     val platform = LocalPlatform.current
+    val use24h = s.data.prefs.use24h
     PanelCard(modifier.testTag("widget_${w.name}")) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (w) {
+                ModeWidget.TASKS -> {
+                    Eyebrow("${mode.name} tasks")
+                    val list = Derive.modeTasks(s, mode.id)
+                    if (list.isEmpty()) T("Nothing tagged for ${mode.name}. Tag tasks with a mode to see them here.", Type.label, p.muted)
+                    list.take(4).forEach { t ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CheckCircle(false, { dispatch(Action.ToggleTaskDone(t.id)) }, size = 36.dp)
+                            Spacer(Modifier.width(8.dp))
+                            T(t.title, Type.label, maxLines = 1, modifier = Modifier.weight(1f))
+                        }
+                    }
+                    if (list.size > 4) QuietButton("+${list.size - 4} more", { dispatch(Action.OpenTasks(mode.id)) })
+                }
                 ModeWidget.ROUTINES -> {
-                    WidgetTitle("${mode.name} routines")
+                    Eyebrow("${mode.name} routines")
                     val list = Derive.routinesFor(s, mode.id).filter { it.id != mode.featuredRoutineId }
-                    if (list.isEmpty()) T("No other routines assigned to ${mode.name}.", Type.label, p.muted)
+                    if (list.isEmpty()) T("No other routines for ${mode.name}.", Type.label, p.muted)
                     list.take(4).forEach { r ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            T("${r.icon}  ${r.name}", Type.label, modifier = Modifier.weight(1f))
+                            T("${r.icon}  ${r.name}" + if (r.id in s.data.daily.routinesDone) "  ✓" else "", Type.label, modifier = Modifier.weight(1f))
                             SecondaryButton("Start", { dispatch(Action.StartRoutine(r.id)) })
                         }
                     }
                 }
+                ModeWidget.FOCUS -> {
+                    Eyebrow("Focus")
+                    T("One thing, one timer", Type.heading)
+                    T("${s.data.daily.focusDone} session${if (s.data.daily.focusDone == 1) "" else "s"} today", Type.small, p.muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PrimaryButton("${s.data.prefs.focusMin} min", { dispatch(Action.StartFocus(s.ui.spotlightTaskId ?: Derive.todayTasks(s).firstOrNull()?.id)) }, tag = "focusWidgetStart")
+                        SecondaryButton("10 min", { dispatch(Action.StartFocus(null, 10)) })
+                    }
+                }
                 ModeWidget.NEXT_MODE -> {
-                    WidgetTitle("Coming up")
+                    Eyebrow("Coming up")
                     val nc = Derive.nextChange(s, env)
                     if (nc == null) T("Nothing else scheduled.", Type.label, p.muted)
                     else {
-                        val (t, r) = nc
-                        val at = Scheduler.toEpoch(t, env.zone)
-                        T(when (r) { is ScheduleResult.Active -> "${r.mode.icon}  ${r.mode.name}"; is ScheduleResult.Conflict -> "⚠️ Conflict"; ScheduleResult.Free -> "Free time" }, Type.heading)
-                        T("${shortTime(at, env, s.data.prefs.use24h)} · ${inText((at - s.now) / 60_000)}", Type.label, p.muted)
+                        val at = Scheduler.toEpoch(nc.first, env.zone)
+                        T(resultLabel(nc.second), Type.heading)
+                        T("${shortTime(at, env, use24h)} · ${inText((at - s.now) / 60_000)}", Type.label, p.muted)
                     }
                 }
                 ModeWidget.BREAK_REMINDER -> {
-                    WidgetTitle("Breaks")
+                    Eyebrow("Breaks")
                     val mins = Derive.minutesSinceBreak(s)
                     val due = mins >= s.data.prefs.breakIntervalMin
-                    T(if (due) "Time for a short break" else "Last break ${mins} min ago", Type.heading, if (due) p.warn else p.text)
-                    T("Every ${s.data.prefs.breakIntervalMin} min", Type.small, p.muted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SecondaryButton("I took a break", { dispatch(Action.TookBreak) }, tag = "tookBreak")
-                        if (due && s.data.routines.any { it.id == "r_hydrate" && it.enabled }) PrimaryButton("Hydrate + Reset", { dispatch(Action.StartRoutine("r_hydrate")) })
+                    T(if (due) "Time for a short break" else "Last break ${durText(mins)} ago", Type.heading, if (due) p.warm else p.text)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton("I took one", { dispatch(Action.TookBreak) }, tag = "tookBreak")
+                        if (due && s.data.routines.any { it.id == "r_hydrate" && it.enabled }) PrimaryButton("2-min reset", { dispatch(Action.StartRoutine("r_hydrate")) })
                     }
                 }
-                ModeWidget.SLEEP_AUDIO -> {
-                    WidgetTitle("Sleep audio")
+                ModeWidget.CALENDAR -> CalendarWidget(s, env, mode, dispatch)
+                ModeWidget.MUSIC -> {
+                    Eyebrow("Music")
+                    val np = s.live.nowPlaying
+                    if (np != null) {
+                        T(np.title.ifBlank { "Playing" }, Type.heading, maxLines = 1)
+                        if (np.artist.isNotBlank()) T(np.artist, Type.small, p.muted, maxLines = 1)
+                    } else T(if (s.live.mediaAccess) "Nothing playing" else "Play / pause whatever's playing", Type.label, p.muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RoundIconButton("⏮", { platform.media(MediaKey.PREVIOUS) }, size = 52.dp)
+                        RoundIconButton(if (np?.playing == true) "❚❚" else "▶", { platform.media(MediaKey.PLAY_PAUSE) }, size = 60.dp, filled = true, tag = "playPause")
+                        RoundIconButton("⏭", { platform.media(MediaKey.NEXT) }, size = 52.dp)
+                    }
                     val uri = s.data.prefs.sleepAudioUri.trim()
-                    T(if (uri.isEmpty()) "Add a playlist link in Settings → Music" else "Your sleep playlist", Type.label, p.muted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (uri.isNotEmpty()) PrimaryButton("▶  Play", {
-                            if (!platform.openUri(uri)) dispatch(Action.ShowMessage("Couldn't open that link. Is Spotify installed?"))
-                        })
-                        SecondaryButton("Open Spotify", {
-                            if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this tablet."))
-                        })
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (uri.isNotEmpty()) QuietButton("Sleep playlist", { if (!platform.openUri(uri)) dispatch(Action.ShowMessage("Couldn't open that link. Is Spotify installed?")) })
+                        QuietButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this tablet.")) })
                     }
-                }
-                ModeWidget.TASKS -> {
-                    WidgetTitle("Tasks")
-                    T("Not connected yet", Type.heading)
-                    T("Google Tasks arrives in the next build, filtered for ${mode.name}.", Type.label, p.muted)
-                }
-                ModeWidget.CALENDAR -> {
-                    WidgetTitle(if (mode.id == "bedtime") "Tomorrow" else "Next event")
-                    T("Not connected yet", Type.heading)
-                    T("Comes with Google Calendar in the next build.", Type.label, p.muted)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun CalendarWidget(s: AppState, env: Env, mode: Mode, dispatch: Dispatch) {
+    val p = P()
+    val use24h = s.data.prefs.use24h
+    val bedtime = mode.id == "bedtime" || Scheduler.toLocal(s.now, env.zone).hour >= 21
+    Eyebrow(if (bedtime) "Tomorrow" else "Today")
+    when (s.live.calendarStatus) {
+        CalendarStatus.OK -> {
+            if (bedtime) {
+                val f = Derive.tomorrowFirst(s, env)
+                if (f == null) T("Nothing scheduled first thing. Sleep in your own time.", Type.label, p.muted)
+                else { T(f.title, Type.heading, maxLines = 2); T("First thing: ${shortTime(f.begin, env, use24h)}", Type.label, p.muted) }
+            } else {
+                val list = Derive.todayEvents(s, env)
+                if (list.isEmpty()) T("Nothing else on the calendar today.", Type.label, p.muted)
+                list.take(4).forEach { e -> EventRow(e, s, env) }
+            }
+        }
+        CalendarStatus.NEEDS_PERMISSION -> {
+            T("Allow calendar access to see your events here.", Type.label, p.muted)
+            SecondaryButton("Allow", { dispatch(Action.OpenSettings(SettingsSection.CALENDAR)) })
+        }
+        CalendarStatus.ERROR -> T("Couldn't read the calendar just now. It will try again shortly.", Type.label, p.muted)
+        CalendarStatus.OFF -> {
+            T("Show your Google Calendar events from this tablet.", Type.label, p.muted)
+            SecondaryButton("Turn on", { dispatch(Action.OpenSettings(SettingsSection.CALENDAR)) }, tag = "calendarTurnOn")
+        }
+    }
+}
+
+@Composable
+private fun EventRow(e: CalEvent, s: AppState, env: Env) {
+    val p = P()
+    val now = e.begin <= s.now && e.end > s.now
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(PillShape).background(if (now) p.warm else p.accent))
+        Spacer(Modifier.width(10.dp))
+        T(if (e.allDay) "All day" else shortTime(e.begin, env, s.data.prefs.use24h), Type.small, p.muted, Modifier.width(92.dp))
+        Text1(e.title, if (now) p.text else p.text.copy(alpha = 0.85f))
+    }
+}
+
+@Composable
+private fun Text1(text: String, color: Color) =
+    androidx.compose.material3.Text(text, style = Type.label, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -69,7 +69,8 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
                 SettingsSection.MODES -> ModesSection(s, dispatch)
                 SettingsSection.ROUTINES -> RoutinesSection(s, dispatch)
                 SettingsSection.WIDGETS -> WidgetsSection(s, dispatch)
-                SettingsSection.TASKS_CALENDAR -> TasksCalendarSection()
+                SettingsSection.TASKS -> TasksSection(s, dispatch)
+                SettingsSection.CALENDAR -> CalendarSection(s, dispatch)
                 SettingsSection.MUSIC -> MusicSection(s, dispatch)
                 SettingsSection.APPEARANCE -> AppearanceSection(s, dispatch)
                 SettingsSection.DEVICE -> DeviceSection(s, dispatch)
@@ -176,13 +177,56 @@ private fun WidgetsSection(s: AppState, dispatch: Dispatch) {
 }
 
 @Composable
-private fun TasksCalendarSection() {
+private fun TasksSection(s: AppState, dispatch: Dispatch) {
     val p = P()
+    val pr = s.data.prefs
+    T("Built for brains that juggle a lot: a small list for today, an inbox for everything else, and one timer at a time.", Type.body, p.muted)
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column {
+            Stepper("Today's list holds", pr.todayLimit, { v -> upd(s, dispatch) { it.copy(todayLimit = v) } }, 1..7, format = { "$it things" })
+            Stepper("Focus timer length", pr.focusMin, { v -> upd(s, dispatch) { it.copy(focusMin = v) } }, 5..90, step = 5, format = { "$it min" })
+        }
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column {
+            T("Heads-up before the mode changes", Type.heading)
+            T("Helps with time blindness: a gentle card (and optional soft chime) before Work ends, Bedtime starts, and so on.", Type.small, p.muted)
+            Stepper("Warn me", pr.transitionWarnMin, { v -> upd(s, dispatch) { it.copy(transitionWarnMin = v) } }, 0..30, step = 5,
+                format = { if (it == 0) "Off" else "$it min before" })
+            ToggleRow("Soft chime with the heads-up", pr.chimeOnTransition, { v -> upd(s, dispatch) { it.copy(chimeOnTransition = v) } })
+        }
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("Google Tasks", Type.heading)
+            T("Two-way sync with Google Tasks comes with accounts in the next build (it needs the Google sign-in you're setting up in Firebase).", Type.body, p.muted)
+        }
+    }
+}
+
+@Composable
+private fun CalendarSection(s: AppState, dispatch: Dispatch) {
+    val p = P()
+    val platform = LocalPlatform.current
+    val pr = s.data.prefs
+    T("Reads the calendars already synced to this tablet (your Google Calendar included). Read-only, and nothing leaves the device.", Type.body, p.muted)
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            T("Not connected in this version", Type.heading)
-            T("Google Tasks and Google Calendar come in the next build (PRD stage V4). They need Google sign-in on the tablet, set up through a Google Cloud project — I'll walk you through that when we get there.", Type.body, p.muted)
-            T("Until then, the Tasks and Calendar widgets say “Not connected yet” rather than showing anything made up.", Type.body, p.muted)
+            ToggleRow("Show my calendar", pr.calendarOn, { on ->
+                upd(s, dispatch) { it.copy(calendarOn = on) }
+                if (on && !platform.calendarAllowed()) platform.requestCalendar()
+            }, tag = "calendarSwitch")
+            if (pr.calendarOn) {
+                val status = when (s.live.calendarStatus) {
+                    app.mycontrolpanel.core.CalendarStatus.OK -> "Connected · ${s.live.calendar.size} upcoming event(s) loaded"
+                    app.mycontrolpanel.core.CalendarStatus.NEEDS_PERMISSION -> "Needs permission to read your calendar"
+                    app.mycontrolpanel.core.CalendarStatus.ERROR -> "Couldn't read the calendar — will retry"
+                    app.mycontrolpanel.core.CalendarStatus.OFF -> "Starting…"
+                }
+                T(status, Type.label, p.muted)
+                if (!platform.calendarAllowed()) PrimaryButton("Allow calendar access", { platform.requestCalendar() })
+                T("Don't see your events? On the tablet: Settings → Accounts → Google → turn on Calendar sync.", Type.small, p.muted)
+            }
         }
     }
 }
@@ -205,6 +249,15 @@ private fun MusicSection(s: AppState, dispatch: Dispatch) {
                 })
                 SecondaryButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this tablet.")) })
             }
+        }
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("Play / pause / skip", Type.heading)
+            T("The Music widget's buttons control whatever is playing (Spotify, YouTube Music…). To also show the song name, Android needs you to allow “notification access” for this app — it's only used to read what's playing.",
+                Type.body, p.muted)
+            T(if (s.live.mediaAccess) "Song names: on" else "Song names: off", Type.label, p.muted)
+            if (!s.live.mediaAccess) SecondaryButton("Allow song names…", { platform.openMediaAccessSettings() })
         }
     }
 }
@@ -281,8 +334,9 @@ private fun AboutSection() {
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             T("My Control Panel  v$v", Type.heading)
-            T("Core engine build: dashboard, modes & schedule, manual override, routines with timers, Quick Routines, editors, persistence, reset, always-on display.", Type.body, p.muted)
-            T("Not yet: Google Tasks, Google Calendar, Spotify playback control, weather.", Type.body, p.muted)
+            T("Dashboard with one Right-now card, modes & schedule, heads-up before changes, routines with timers and breathing, Quick Routines, built-in tasks (inbox, today's three, pick-one), focus timer, calendar, music controls.", Type.body, p.muted)
+            T("Next: accounts, sync across devices, shared spaces, Google Tasks.", Type.body, p.muted)
+            T("Fonts: Fraunces and DM Sans (SIL Open Font License).", Type.small, p.muted)
             T("Everything stays on this tablet. Nothing is sent anywhere.", Type.body, p.muted)
         }
     }
