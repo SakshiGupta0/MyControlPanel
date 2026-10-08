@@ -81,6 +81,7 @@ jobs:
           key: avd-31-pixel_c-v1
       - name: Create emulator snapshot (first run only)
         if: steps.avd-cache.outputs.cache-hit != 'true'
+        continue-on-error: true   # a flaky boot here shouldn't fail the run; the test steps boot again
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 31
