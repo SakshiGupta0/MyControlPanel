@@ -10,7 +10,7 @@ import java.time.ZoneId
 
 enum class SettingsSection(val label: String) {
     MODES("Modes"), ROUTINES("Routines"), TASKS("Tasks & focus"), WIDGETS("Dashboard"), CALENDAR("Calendar"),
-    MUSIC("Music"), APPEARANCE("Appearance"), DEVICE("Device"), RESET("Reset"), ABOUT("About"),
+    MUSIC("Music"), APPEARANCE("Appearance"), DEVICE("Device"), ACCOUNT("Account & sharing"), RESET("Reset"), ABOUT("About"),
 }
 
 /** Task list filters: "today", "inbox", "all", "done", or a mode id. */
@@ -125,7 +125,7 @@ sealed interface Action {
     data class ShowMessage(val message: String) : Action
     // tasks
     data class OpenTasks(val filter: String) : Action
-    data class Capture(val text: String, val today: Boolean = false) : Action
+    data class Capture(val text: String, val today: Boolean = false, val spaceId: String? = null) : Action
     data class EditTask(val id: String?) : Action
     data class UpdateTaskDraft(val task: Task) : Action
     object SaveTask : Action
@@ -146,6 +146,17 @@ sealed interface Action {
     // live device data
     data class CalendarLoaded(val events: List<CalEvent>, val status: CalendarStatus) : Action
     data class MediaChanged(val nowPlaying: NowPlaying?, val access: Boolean) : Action
+    // accounts & sync (dispatched by the sync engine)
+    data class AccountChanged(val account: Account?, val firebaseReady: Boolean) : Action
+    data class SyncStatusChanged(val status: SyncStatus, val error: String? = null) : Action
+    data class ApplyRemote(val docs: List<Sync.Doc>, val accountWasEmpty: Boolean = false) : Action
+    data class MarkSent(val docs: List<Sync.Doc>) : Action
+    data class SpacesChanged(val spaces: List<Space>) : Action
+    object SignedOut : Action
+    // Google Tasks
+    data class SetGoogleTasks(val on: Boolean) : Action
+    data class GTasksStatus(val text: String?) : Action
+    data class ApplyGTasks(val result: GTasksPlan.Result, val at: Long, val created: Map<String, String> = emptyMap()) : Action
 }
 
 object Reducer {
@@ -160,7 +171,17 @@ object Reducer {
         return reduce(AppState(cleaned, Ui(screen = screen, message = message), now), Action.Tick, now, env).state
     }
 
+    /** Reduce, then record which synced items changed (for upload). Remote merges are not re-stamped. */
     fun reduce(prev: AppState, a: Action, now: Long, env: Env): Reduced {
+        val r = reduceInner(prev, a, now, env)
+        if (a is Action.ApplyRemote || a is Action.MarkSent || a is Action.SpacesChanged || a is Action.SignedOut) return r
+        var stamped = Sync.stamp(prev.data, r.state.data, now)
+        // tasks removed *because* Google deleted them must not be queued for deletion at Google again
+        if (a is Action.ApplyGTasks) stamped = stamped.copy(gDeletes = r.state.data.gDeletes)
+        return if (stamped == r.state.data) r else r.copy(state = r.state.copy(data = stamped))
+    }
+
+    private fun reduceInner(prev: AppState, a: Action, now: Long, env: Env): Reduced {
         val s = prev.copy(now = now)
         val d = s.data
         val ui = s.ui
@@ -374,9 +395,9 @@ object Reducer {
                 val text = a.text.trim()
                 if (text.isEmpty()) return ui(ui.copy(dialog = null))
                 val addToday = a.today && Derive.todayTasks(s).size < d.prefs.todayLimit
-                val t = Task(env.newId(), text.take(300), today = addToday, createdAt = now, order = now)
+                val t = Task(env.newId(), text.take(300), today = addToday, createdAt = now, order = now, spaceId = a.spaceId)
                 Reduced(s.copy(data = d.copy(tasks = d.tasks + t), ui = ui.copy(dialog = null,
-                    message = if (addToday) "Added to today." else if (a.today) "Saved to your inbox — today's list is full." else "Saved to your inbox. Out of your head ✓")))
+                    message = if (a.spaceId != null) "Added to the shared list." else if (addToday) "Added to today." else if (a.today) "Saved to your inbox — today's list is full." else "Saved to your inbox. Out of your head ✓")))
             }
             is Action.EditTask -> {
                 val t = a.id?.let { id -> d.tasks.find { it.id == id } } ?: Task(env.newId(), "", createdAt = now, order = now)
@@ -406,7 +427,8 @@ object Reducer {
             ))
             is Action.ToggleTaskDone -> {
                 val t = d.tasks.find { it.id == a.id } ?: return Reduced(s)
-                val nt = if (t.done) t.copy(done = false, doneAt = null) else t.copy(done = true, doneAt = now)
+                val nt = if (t.done) t.copy(done = false, doneAt = null, doneBy = null)
+                         else t.copy(done = true, doneAt = now, doneBy = if (t.spaceId != null) s.live.account?.name?.substringBefore(' ') else null)
                 Reduced(s.copy(
                     data = d.copy(tasks = d.tasks.map { if (it.id == t.id) nt else it }),
                     ui = ui.copy(spotlightTaskId = ui.spotlightTaskId?.takeIf { it != t.id || !nt.done },
@@ -459,6 +481,33 @@ object Reducer {
             // ---------------- live device data ----------------
             is Action.CalendarLoaded -> Reduced(s.copy(live = s.live.copy(calendar = a.events, calendarStatus = a.status)))
             is Action.MediaChanged -> Reduced(s.copy(live = s.live.copy(nowPlaying = a.nowPlaying, mediaAccess = a.access)))
+
+            // ---------------- accounts & sync ----------------
+            is Action.AccountChanged -> Reduced(s.copy(live = s.live.copy(account = a.account, firebaseReady = a.firebaseReady,
+                syncStatus = if (a.account == null) SyncStatus.LOCAL_ONLY else SyncStatus.CONNECTING, syncError = null,
+                spaces = if (a.account == null) emptyList() else s.live.spaces)))
+            is Action.SyncStatusChanged -> Reduced(s.copy(live = s.live.copy(syncStatus = a.status, syncError = a.error)))
+            is Action.ApplyRemote -> {
+                // An empty account (first sign-in anywhere) adopts this device's data; otherwise merge, newest wins.
+                val merged = if (a.accountWasEmpty) Sync.stampAll(d, now) else Sync.applyRemote(d, a.docs)
+                tick(s.copy(data = merged), env)
+            }
+            is Action.MarkSent -> data(Sync.markSent(d, a.docs))
+            is Action.SpacesChanged -> Reduced(s.copy(
+                data = Sync.dropSpaces(d, a.spaces.map { it.id }.toSet()),
+                live = s.live.copy(spaces = a.spaces),
+            ))
+            Action.SignedOut -> Reduced(s.copy(
+                // Personal data stays on this tablet; shared-space tasks leave with the account.
+                data = Sync.dropSpaces(d, emptySet()).copy(synced = emptyMap(), gTasksOn = false),
+                live = s.live.copy(account = null, spaces = emptyList(), syncStatus = SyncStatus.LOCAL_ONLY),
+                ui = ui.copy(message = "Signed out. Your own modes, routines and tasks stay on this tablet."),
+            ))
+
+            // ---------------- Google Tasks ----------------
+            is Action.SetGoogleTasks -> data(d.copy(gTasksOn = a.on, gLastSync = if (a.on) d.gLastSync else 0))
+            is Action.GTasksStatus -> Reduced(s.copy(live = s.live.copy(gTasksStatus = a.text)))
+            is Action.ApplyGTasks -> data(GTasksPlan.applyLocal(d, a.result, a.at, a.created))
 
             // ---------------- persistence feedback ----------------
             is Action.SaveFailed -> ui(ui.copy(saveError = a.message))
@@ -609,10 +658,13 @@ object Derive {
         val doneToday = s.data.tasks.filter { it.done && isToday(it.doneAt, s, env) }
         return when (filter) {
             TaskFilter.TODAY -> open.filter { it.today }.sortedBy { it.order } + doneToday.filter { it.today }
-            TaskFilter.INBOX -> open.filter { it.modeIds.isEmpty() && !it.today }.sortedByDescending { it.createdAt }
+            TaskFilter.INBOX -> open.filter { it.modeIds.isEmpty() && !it.today && it.spaceId == null }.sortedByDescending { it.createdAt }
             TaskFilter.ALL -> open.sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
             TaskFilter.DONE -> s.data.tasks.filter { it.done }.sortedByDescending { it.doneAt ?: 0 }
-            else -> open.filter { filter in it.modeIds }.sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
+            else -> if (filter.startsWith("space:")) {
+                val sid = filter.removePrefix("space:")
+                open.filter { it.spaceId == sid }.sortedBy { it.order } + doneToday.filter { it.spaceId == sid }
+            } else open.filter { filter in it.modeIds }.sortedWith(compareByDescending<Task> { it.today }.thenBy { it.order })
         }
     }
 

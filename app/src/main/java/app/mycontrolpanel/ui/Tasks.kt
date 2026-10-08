@@ -55,7 +55,8 @@ import kotlinx.coroutines.delay
 fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
     val p = P()
     val filters = listOf(TaskFilter.TODAY to "★  Today", TaskFilter.INBOX to "📥  Inbox", TaskFilter.ALL to "All open") +
-        s.data.modes.sortedBy { it.order }.map { it.id to "${it.icon}  ${it.name}" } + listOf(TaskFilter.DONE to "✓  Done")
+        s.data.modes.sortedBy { it.order }.map { it.id to "${it.icon}  ${it.name}" } +
+        s.live.spaces.map { "space:${it.id}" to "🏠  ${it.name}" } + listOf(TaskFilter.DONE to "✓  Done")
     val list = Derive.tasksFor(s, filter, env)
     Row(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
         Column(Modifier.width(260.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
@@ -82,7 +83,10 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
             when (filter) {
                 TaskFilter.TODAY -> T("Up to ${s.data.prefs.todayLimit} things. Star a task (☆) to put it here.", Type.label, p.muted)
                 TaskFilter.INBOX -> T("Everything you brain-dumped. Star it for today, or tap it to give it a mode.", Type.label, p.muted)
-                else -> {}
+                else -> if (filter.startsWith("space:")) {
+                    val sp = s.live.spaces.find { it.id == filter.removePrefix("space:") }
+                    if (sp != null) T("Shared with ${sp.members.values.joinToString(", ")}. Everyone sees ticks and new tasks right away.", Type.label, p.muted)
+                }
             }
             PanelCard(Modifier.fillMaxWidth()) {
                 Column {
@@ -113,7 +117,7 @@ private fun QuickAdd(filter: String, dispatch: Dispatch) {
         Box(Modifier.weight(1f)) { PanelTextField(text, { text = it }, "Add a task…", tag = "quickAddField") }
         if (platform.voiceAvailable) RoundIconButton("🎙", { platform.listen { text = it } }, size = 56.dp)
         PrimaryButton("Add", {
-            dispatch(Action.Capture(text, today = filter == TaskFilter.TODAY)); text = ""
+            dispatch(Action.Capture(text, today = filter == TaskFilter.TODAY, spaceId = filter.takeIf { it.startsWith("space:") }?.removePrefix("space:"))); text = ""
         }, tag = "quickAddButton", enabled = text.isNotBlank())
     }
 }
@@ -171,6 +175,13 @@ fun TaskEditorDialog(s: AppState, task: Task, isNew: Boolean, dispatch: Dispatch
                 PanelTextField(task.notes, { set(task.copy(notes = it)) }, "Notes or the very first tiny step (optional)", singleLine = false)
                 ToggleRow("★  On today's list", task.today, { set(task.copy(today = it)) })
                 if (!isNew) ToggleRow("Done", task.done, { set(task.copy(done = it, doneAt = if (it) s.now else null)) })
+                if (s.live.spaces.isNotEmpty() || task.spaceId != null) {
+                    T("List", Type.label, p.muted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Chip("🔒 Just me", task.spaceId == null, { set(task.copy(spaceId = null)) })
+                        s.live.spaces.forEach { sp -> Chip("🏠 ${sp.name}", task.spaceId == sp.id, { set(task.copy(spaceId = sp.id, googleId = null)) }) }
+                    }
+                }
                 T("Show in modes", Type.label, p.muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     s.data.modes.sortedBy { it.order }.forEach { m ->

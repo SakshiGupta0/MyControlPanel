@@ -2,7 +2,7 @@
 
 An always-on room control panel for the Samsung Galaxy Tab S6 Lite (landscape). It shows the time, which phase of the day you're in, and what to do next, and it guides you through routines one step at a time.
 
-**v0.1.0 — core engine** (PRD stages V1–V3)
+**v0.3.0** — core engine + ADHD-friendly redesign + accounts, sync & sharing
 
 ## Install on the tablet
 1. On the tablet, open this repo's **Releases** page (`github.com/SakshiGupta0/MyControlPanel/releases`) and tap the latest `MyControlPanel-v…apk`.
@@ -20,8 +20,19 @@ Builds are published only after the core logic tests and the emulator smoke test
 - Settings: Modes, Routines, Widgets, Tasks & Calendar, Music, Appearance, Device, Reset, About
 - Everything is stored on the tablet only, in one JSON file written safely in a single step
 
+## v0.2–v0.3 additions
+- **Right now** card (one thing at a time), time-left bar, heads-up + soft chime before mode changes
+- Built-in tasks: brain-dump inbox (voice too), today's three, pick-one-for-me, mode tags, focus timer
+- Calendar from the tablet's synced calendars; music controls + what's playing
+- Sign in with Google (Firebase), sync across devices, shared task spaces with invite codes, Google Tasks two-way sync
+- New look: Fraunces + DM Sans (OFL, see `licenses/`), warm palette, per-mode colours
+
+## Firebase setup
+- `app/google-services.json` is the project config (not a secret).
+- **Security rules:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish.
+
 ## Not yet
-Google Tasks, Google Calendar (both show "Not connected yet"), Spotify playback control (the app only opens Spotify or a playlist link), weather, and portrait layout.
+Weather, portrait layout, shared routines (spaces share tasks for now).
 
 ## Code map
 - `app/src/main/java/app/mycontrolpanel/core/`: plain Kotlin with no Android code. It holds the models, scheduler, routine runner, the reducer (the single source of truth), defaults and the JSON codec. Tests are in `app/src/test/.../CoreSuite.kt`.

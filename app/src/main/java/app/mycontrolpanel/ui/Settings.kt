@@ -74,6 +74,7 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
                 SettingsSection.MUSIC -> MusicSection(s, dispatch)
                 SettingsSection.APPEARANCE -> AppearanceSection(s, dispatch)
                 SettingsSection.DEVICE -> DeviceSection(s, dispatch)
+                SettingsSection.ACCOUNT -> AccountSection(s, dispatch)
                 SettingsSection.RESET -> ResetSection(dispatch)
                 SettingsSection.ABOUT -> AboutSection()
             }
@@ -199,7 +200,7 @@ private fun TasksSection(s: AppState, dispatch: Dispatch) {
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             T("Google Tasks", Type.heading)
-            T("Two-way sync with Google Tasks comes with accounts in the next build (it needs the Google sign-in you're setting up in Firebase).", Type.body, p.muted)
+            T("Two-way sync with Google Tasks lives in Settings → Account & sharing.", Type.body, p.muted)
         }
     }
 }
@@ -316,6 +317,104 @@ private fun DeviceSection(s: AppState, dispatch: Dispatch) {
 }
 
 @Composable
+private fun AccountSection(s: AppState, dispatch: Dispatch) {
+    val p = P()
+    val platform = LocalPlatform.current
+    val acct = s.live.account
+    if (!s.live.firebaseReady) {
+        T("Accounts aren't switched on in this build.", Type.body, p.muted); return
+    }
+    if (acct == null) {
+        PanelCard(Modifier.fillMaxWidth(), tint = p.accentSoft) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                T("Use your panel everywhere", Type.title)
+                T("Sign in with Google to sync your modes, routines, tasks and settings between this tablet and your phone — and to share lists with people you choose.", Type.body, p.muted)
+                T("The first time you sign in, everything set up on this tablet goes to your account. Signing in on another device later brings it there.", Type.small, p.muted)
+                PrimaryButton("Sign in with Google", { platform.signIn() }, tag = "signIn", tall = 60.dp, style = Type.heading)
+            }
+        }
+        T("You can keep using the panel without an account — everything works on this tablet alone.", Type.small, p.muted)
+        return
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.Box(Modifier.padding(end = 16.dp).clip(PillShape).background(p.accentSoft).padding(horizontal = 18.dp, vertical = 10.dp)) {
+                T(acct.name.take(1).uppercase(), Type.title, p.accent)
+            }
+            Column(Modifier.weight(1f)) {
+                T(acct.name, Type.heading)
+                T(acct.email, Type.small, p.muted)
+                T(when (s.live.syncStatus) {
+                    app.mycontrolpanel.core.SyncStatus.SYNCED -> "✓ Synced"
+                    app.mycontrolpanel.core.SyncStatus.CONNECTING -> "Connecting…"
+                    app.mycontrolpanel.core.SyncStatus.OFFLINE -> "Offline — changes will sync when you're back online"
+                    app.mycontrolpanel.core.SyncStatus.ERROR -> "⚠️ ${s.live.syncError ?: "Sync problem"}"
+                    app.mycontrolpanel.core.SyncStatus.LOCAL_ONLY -> "Not syncing"
+                }, Type.label, if (s.live.syncStatus == app.mycontrolpanel.core.SyncStatus.ERROR) p.danger else p.muted, Modifier.testTag("syncStatus"))
+            }
+            SecondaryButton("Sign out", { platform.signOut() }, tag = "signOut")
+        }
+    }
+
+    // ---- shared spaces ----
+    T("Shared spaces", Type.title)
+    T("A shared space is a task list you share — flat chores, a trip, a project. Everyone in it sees the same tasks and who ticked them off. Your own modes, routines and tasks stay private.", Type.body, p.muted)
+    s.live.spaces.forEach { sp ->
+        PanelCard(Modifier.fillMaxWidth().testTag("space_${sp.name}")) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    T("🏠  ${sp.name}", Type.heading, modifier = Modifier.weight(1f))
+                    QuietButton("Open list", { dispatch(Action.OpenTasks("space:${sp.id}")) })
+                }
+                T(sp.members.values.joinToString(" · "), Type.small, p.muted)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    T("Invite code  ", Type.label, p.muted)
+                    T(sp.inviteCode, Type.title.copy(letterSpacing = androidx.compose.ui.unit.TextUnit(4f, androidx.compose.ui.unit.TextUnitType.Sp)), p.accent)
+                    Spacer(Modifier.weight(1f))
+                    SecondaryButton("Share invite", { platform.share(
+                        "Join my “${sp.name}” list on My Control Panel: open the app → Settings → Account & sharing → Join, and enter code ${sp.inviteCode}") })
+                    QuietButton("Leave", { platform.leaveSpace(sp.id) }, color = p.danger)
+                }
+            }
+        }
+    }
+    var newName by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        PanelCard(Modifier.weight(1f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                T("Create a space", Type.heading)
+                PanelTextField(newName, { newName = it }, "Name, e.g. Flat chores", tag = "spaceName")
+                PrimaryButton("Create", { platform.createSpace(newName); newName = "" }, enabled = newName.isNotBlank(), tag = "createSpace")
+            }
+        }
+        PanelCard(Modifier.weight(1f)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                T("Join with a code", Type.heading)
+                PanelTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, "6-letter code", tag = "joinCode")
+                PrimaryButton("Join", { platform.joinSpace(code); code = "" }, enabled = code.length == 6, tag = "joinSpace")
+            }
+        }
+    }
+
+    // ---- Google Tasks ----
+    T("Google Tasks", Type.title)
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("Keep your personal tasks in step with Google Tasks (“My Tasks” list) — add on your phone in Google Tasks, see it here, and the other way round. Shared-space tasks stay out of Google.", Type.body, p.muted)
+            s.live.gTasksStatus?.let { T(it, Type.label, p.muted, Modifier.testTag("gtasksStatus")) }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!s.data.gTasksOn) PrimaryButton("Connect Google Tasks", { platform.connectGoogleTasks() }, tag = "connectGTasks")
+                else {
+                    SecondaryButton("Sync now", { platform.syncGoogleTasksNow() })
+                    QuietButton("Turn off", { dispatch(Action.SetGoogleTasks(false)) }, color = p.muted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ResetSection(dispatch: Dispatch) {
     val p = P()
     PanelCard(Modifier.fillMaxWidth()) {
@@ -335,9 +434,9 @@ private fun AboutSection() {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             T("My Control Panel  v$v", Type.heading)
             T("Dashboard with one Right-now card, modes & schedule, heads-up before changes, routines with timers and breathing, Quick Routines, built-in tasks (inbox, today's three, pick-one), focus timer, calendar, music controls.", Type.body, p.muted)
-            T("Next: accounts, sync across devices, shared spaces, Google Tasks.", Type.body, p.muted)
+            T("Accounts (Sign in with Google), sync across your devices, shared task spaces, Google Tasks two-way sync.", Type.body, p.muted)
             T("Fonts: Fraunces and DM Sans (SIL Open Font License).", Type.small, p.muted)
-            T("Everything stays on this tablet. Nothing is sent anywhere.", Type.body, p.muted)
+            T("Without an account everything stays on this tablet. Signed in, your data is stored in your own Firebase project and only you (and people in spaces you share) can read it.", Type.body, p.muted)
         }
     }
 }

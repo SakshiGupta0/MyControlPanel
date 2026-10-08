@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// My Control Panel — Firestore security rules.
+// Paste this whole file into Firebase console → Firestore → Rules → Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // A synced item: {k: key, mt: last-modified millis, del: deleted?, j: JSON, by: uid}
+    function validItem() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['k', 'mt', 'del', 'j', 'by'])
+        && d.k is string && d.mt is int && d.del is bool
+        && d.j is string && d.j.size() < 100000
+        && d.by == request.auth.uid;
+    }
+    // Time only moves forward: an old offline device can't overwrite a newer edit.
+    function notOlder() {
+      return resource == null || request.resource.data.mt >= resource.data.mt;
+    }
+
+    // ---- personal data: only you ----
+    match /users/{uid}/items/{key} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && validItem() && notOlder();
+      allow delete: if false;
+    }
+
+    // ---- shared spaces ----
+    match /spaces/{spaceId} {
+      function isMember() { return signedIn() && request.auth.uid in resource.data.members; }
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+      allow read: if isMember();
+
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.inviteCode is string;
+
+      allow update: if signedIn() && (
+        // members: rename the space, update names, or remove only themselves
+        (request.auth.uid in resource.data.members
+          && changed().hasOnly(['name', 'members', 'memberNames'])
+          && (request.resource.data.members == resource.data.members
+              || request.resource.data.members.toSet() == resource.data.members.toSet().difference([request.auth.uid].toSet())))
+        ||
+        // joining: add only yourself, and only with this space's real invite code
+        (!(request.auth.uid in resource.data.members)
+          && changed().hasOnly(['members', 'memberNames', 'joinCode'])
+          && request.resource.data.members.toSet() == resource.data.members.toSet().union([request.auth.uid].toSet())
+          && request.resource.data.members.size() <= 20
+          && request.resource.data.joinCode == resource.data.inviteCode)
+      );
+
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      match /items/{key} {
+        function member() {
+          return signedIn() && request.auth.uid in get(/databases/$(database)/documents/spaces/$(spaceId)).data.members;
+        }
+        allow read: if member();
+        allow create, update: if member() && validItem() && notOlder();
+        allow delete: if false;
+      }
+    }
+
+    // ---- invite codes: look up one code at a time, never list them ----
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.auth.uid in getAfter(/databases/$(database)/documents/spaces/$(request.resource.data.spaceId)).data.members;
+      allow update, delete: if false;
+    }
+  }
+}

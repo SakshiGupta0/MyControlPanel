@@ -434,6 +434,108 @@ object CoreSuite {
             eq(4, d.modes[0].tint, "bedtime tint"); eq(emptyList<Task>(), d.tasks, "no tasks"); ok(d.prefs.use24h, "prefs kept")
             eq(3, d.prefs.todayLimit, "new prefs default")
         },
+
+        "sync: two devices converge through the server (newest change wins)" to {
+            val server = LinkedHashMap<String, Sync.Doc>()
+            fun push(st: AppState): AppState {
+                val out = Sync.outgoing(st.data)
+                out.forEach { d -> if ((server[d.key]?.mt ?: -1) <= d.mt) server[d.key] = d }  // rules: never go back in time
+                return st.go(Action.MarkSent(out))
+            }
+            fun pull(st: AppState) = st.go(Action.ApplyRemote(server.values.toList()))
+            var a = st0(5, 12)
+            a = a.go(Action.ApplyRemote(emptyList(), accountWasEmpty = true)); a = push(a)
+            ok(server.containsKey("mode:work") && server.containsKey("prefs"), "first device uploaded everything")
+            var b = pull(Reducer.initial(Defaults.data(), t(5, 12), env))
+            eq(a.data.modes, b.data.modes, "second device took the account's modes")
+            a = a.go(Action.Capture("buy milk"), t(5, 12, 1)); a = push(a)
+            b = b.go(Action.AddWater(2), t(5, 12, 2)); b = push(b)
+            a = pull(a); b = pull(b)
+            eq(listOf("buy milk"), b.data.tasks.map { it.title }, "task reached B"); eq(2, a.data.daily.water, "water reached A")
+            ok(Sync.outgoing(a.data).isEmpty() && Sync.outgoing(b.data).isEmpty(), "nothing left to send")
+            // concurrent edits of the same task: later one wins everywhere
+            val id = a.data.tasks.single().id
+            a = a.go(Action.EditTask(id), t(5, 13)).let { it.go(Action.UpdateTaskDraft((it.ui.dialog as Dialog.TaskEditor).task.copy(title = "buy oat milk")), t(5, 13)) }.go(Action.SaveTask, t(5, 13))
+            b = b.go(Action.EditTask(id), t(5, 14)).let { it.go(Action.UpdateTaskDraft((it.ui.dialog as Dialog.TaskEditor).task.copy(title = "buy milk + eggs")), t(5, 14)) }.go(Action.SaveTask, t(5, 14))
+            b = push(b); a = push(a)   // A's older write arrives last but must not win
+            a = pull(a); b = pull(b)
+            eq("buy milk + eggs", a.data.tasks.single().title, "A converged"); eq("buy milk + eggs", b.data.tasks.single().title, "B converged")
+        },
+
+        "sync: deletes travel; a newer edit resurrects" to {
+            val base = Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.Capture("x"))
+            val id = base.data.tasks.single().id
+            val del = base.go(Action.DeleteTask(id), t(5, 13))
+            val delDocs = Sync.outgoing(del.data)
+            ok(delDocs.any { it.key == "task:$id" && it.deleted }, "tombstone goes out")
+            val other = base.go(Action.ApplyRemote(delDocs))
+            ok(other.data.tasks.none { it.id == id }, "deleted on the other device")
+            val olderEdit = Sync.Doc("task:$id", t(5, 12, 30), false, Json.write(Codec.taskOut(base.data.tasks.single().copy(title = "old"))))
+            ok(other.go(Action.ApplyRemote(listOf(olderEdit))).data.tasks.none { it.id == id }, "older edit can't undo the delete")
+            val newerEdit = olderEdit.copy(mt = t(5, 14))
+            eq("old", other.go(Action.ApplyRemote(listOf(newerEdit))).data.tasks.single().title, "newer edit brings it back")
+            ok(other.go(Action.ApplyRemote(listOf(Sync.Doc("task:zz", t(6, 1), false, "{broken")))).data.tasks.isEmpty(), "corrupt doc ignored")
+        },
+
+        "sync: device-only settings stay on the device" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.MarkSent(Sync.outgoing(s.data)))
+            s = s.go(Action.UpdatePrefs(s.data.prefs.copy(textScale = 1.3f, keepScreenOn = false, fullscreen = false)))
+            ok(Sync.outgoing(s.data).none { it.key == "prefs" }, "text size / screen not synced")
+            s = s.go(Action.UpdatePrefs(s.data.prefs.copy(use24h = true)))
+            ok(Sync.outgoing(s.data).any { it.key == "prefs" }, "24h clock synced")
+            val other = Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.UpdatePrefs(Prefs(textScale = 0.9f)))
+                .go(Action.ApplyRemote(Sync.outgoing(s.data)))
+            ok(other.data.prefs.use24h, "remote pref applied"); eq(0.9f, other.data.prefs.textScale, "local text size kept")
+            ok(Sync.outgoing(Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.StartRoutine("r_lunch")).data).none { it.key.startsWith("run") }, "routine in progress is local")
+        },
+
+        "sync: shared space tasks, tombstones and leaving a space" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.EditTask(null)).let { it.go(Action.UpdateTaskDraft((it.ui.dialog as Dialog.TaskEditor).task.copy(title = "bins out", spaceId = "flat"))) }.go(Action.SaveTask)
+            val out = Sync.outgoing(s.data).single { it.key.startsWith("task:") }
+            eq("flat", out.spaceId, "goes to the space")
+            s = s.go(Action.MarkSent(Sync.outgoing(s.data)))
+            val tid = s.data.tasks.single().id
+            s = s.go(Action.AccountChanged(Account("u1", "a@b.c", "Sakshi Gupta"), true))
+            s = s.go(Action.ToggleTaskDone(tid), s.now + 500); eq("Sakshi", s.data.tasks.single().doneBy, "who did it")
+            val s2 = s.go(Action.DeleteTask(tid), s.now + 1000)
+            eq("flat", Sync.outgoing(s2.data).single { it.key == "task:$tid" }.spaceId, "tombstone to the space")
+            val left = s.go(Action.SpacesChanged(emptyList()))
+            ok(left.data.tasks.isEmpty(), "space tasks leave with the space"); ok(Sync.outgoing(left.data).none { it.deleted }, "…without deleting them for others")
+        },
+
+        "google tasks: plan both directions, conflicts, deletes" to {
+            var ids = 0
+            val gen = { "g${++ids}" }
+            var d = Defaults.data().copy(gLastSync = 0, tasks = listOf(
+                Task("l1", "local only"), Task("l2", "linked", googleId = "G2"), Task("l3", "done local", done = true),
+                Task("s1", "shared", spaceId = "flat"),
+            ))
+            val remote = listOf(GTasksPlan.GTask("G1", "from google", "", false, 1000), GTasksPlan.GTask("G2", "linked", "", false, 1000))
+            var r = GTasksPlan.plan(d, remote, gen)
+            eq(listOf("from google"), r.localUpserts.map { it.title }, "new from Google")
+            eq(listOf("l1"), r.remoteCreates.map { it.id }, "local → Google (not done, not shared)")
+            ok(r.remoteUpdates.isEmpty() && r.localDeletes.isEmpty(), "linked + same → nothing")
+            d = GTasksPlan.applyLocal(d, r, 2000, mapOf("l1" to "G9"))
+            eq("G9", d.tasks.first { it.id == "l1" }.googleId, "link stored"); eq(2000L, d.gLastSync, "sync time")
+            // both sides edit l2; Google's edit is newer
+            d = d.copy(meta = d.meta + ("task:l2" to 2500L), tasks = d.tasks.map { if (it.id == "l2") it.copy(title = "local edit") else it })
+            val r2 = GTasksPlan.plan(d, listOf(GTasksPlan.GTask("G2", "google edit", "", false, 3000), GTasksPlan.GTask("G9", "local only", "", false, 2000)), gen)
+            eq("google edit", r2.localUpserts.single().title, "newer Google edit wins")
+            val r3 = GTasksPlan.plan(d, listOf(GTasksPlan.GTask("G2", "linked", "", true, 1500), GTasksPlan.GTask("G9", "local only", "", false, 2000)), gen)
+            eq("G2", r3.remoteUpdates.single().first, "newer local edit goes to Google")
+            // deleted at Google since last sync → delete here
+            val r4 = GTasksPlan.plan(d, listOf(GTasksPlan.GTask("G2", "x", "", false, 1000)), gen)
+            ok("l1" in r4.localDeletes, "removed at Google → removed here")
+            // deleted here → deleted at Google, once
+            var st = Reducer.initial(d, t(5, 12), env).go(Action.DeleteTask("l2"))
+            ok("G2" in st.data.gDeletes, "queued for Google")
+            val r5 = GTasksPlan.plan(st.data, listOf(GTasksPlan.GTask("G2", "linked", "", false, 1000), GTasksPlan.GTask("G9", "local only", "", false, 2000)), gen)
+            eq(setOf("G2"), r5.remoteDeletes, "delete at Google"); ok(r5.localUpserts.none { it.title == "linked" }, "not re-imported")
+            st = st.go(Action.ApplyGTasks(r5, 4000))
+            ok(st.data.gDeletes.isEmpty(), "queue cleared: ${st.data.gDeletes} handled=${r5.handledGDeletes}")
+        },
     )
 
     /** Runs everything; returns failure messages (empty = all passed). */

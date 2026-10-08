@@ -19,6 +19,8 @@ object Codec {
         "focus" to d.focus?.let(::focusOut),
         "lastModeKey" to d.lastModeKey,
         "modeEnteredAt" to d.modeEnteredAt,
+        "meta" to d.meta, "tombs" to d.tombs, "synced" to d.synced, "tombSpaces" to d.tombSpaces,
+        "gDeletes" to d.gDeletes.toList(), "gLastSync" to d.gLastSync, "gTasksOn" to d.gTasksOn,
     ))
 
     fun decode(text: String): AppData {
@@ -40,6 +42,9 @@ object Codec {
             focus = (root["focus"] as? Map<*, *>)?.let(::focusIn),
             lastModeKey = root.str("lastModeKey"),
             modeEnteredAt = root.long("modeEnteredAt"),
+            meta = root.longMap("meta"), tombs = root.longMap("tombs"), synced = root.longMap("synced"),
+            tombSpaces = (root["tombSpaces"] as? Map<*, *>)?.entries?.mapNotNull { (k, v) -> (k as? String)?.let { kk -> (v as? String)?.let { kk to it } } }?.toMap() ?: emptyMap(),
+            gDeletes = root.strSet("gDeletes"), gLastSync = root.long("gLastSync") ?: 0, gTasksOn = root.bool("gTasksOn", false),
         )
     }
 
@@ -122,6 +127,7 @@ object Codec {
     fun taskOut(t: Task) = mapOf(
         "id" to t.id, "title" to t.title, "notes" to t.notes, "modeIds" to t.modeIds.toList(), "today" to t.today,
         "done" to t.done, "doneAt" to t.doneAt, "createdAt" to t.createdAt, "order" to t.order,
+        "spaceId" to t.spaceId, "googleId" to t.googleId, "doneBy" to t.doneBy,
     )
 
     fun taskIn(m: Map<*, *>): Task? {
@@ -140,10 +146,13 @@ object Codec {
         doneAt = m.long("doneAt"),
         createdAt = m.long("createdAt") ?: 0,
         order = m.long("order") ?: 0,
+        spaceId = m.str("spaceId"),
+        googleId = m.str("googleId"),
+        doneBy = m.str("doneBy"),
     )
 
     // ---- prefs / daily / run / focus ----
-    private fun prefsOut(p: Prefs) = mapOf(
+    fun prefsOut(p: Prefs) = mapOf(
         "use24h" to p.use24h, "waterTarget" to p.waterTarget, "glassMl" to p.glassMl, "mealNames" to p.mealNames,
         "breakIntervalMin" to p.breakIntervalMin, "textScale" to p.textScale, "highContrast" to p.highContrast,
         "reduceMotion" to p.reduceMotion, "keepScreenOn" to p.keepScreenOn, "fullscreen" to p.fullscreen,
@@ -152,7 +161,7 @@ object Codec {
         "chimeOnTransition" to p.chimeOnTransition, "calendarOn" to p.calendarOn,
     )
 
-    private fun prefsIn(m: Map<*, *>): Prefs {
+    fun prefsIn(m: Map<*, *>): Prefs {
         val d = Prefs()
         return Prefs(
             use24h = m.bool("use24h", d.use24h),
@@ -176,13 +185,13 @@ object Codec {
         )
     }
 
-    private fun dailyOut(d: Daily) = mapOf(
+    fun dailyOut(d: Daily) = mapOf(
         "date" to d.date, "water" to d.water, "meals" to d.mealsDone.sorted(), "lastBreakAt" to d.lastBreakAt,
         "prompted" to d.prompted.toList(), "dismissed" to d.dismissed.toList(), "routinesDone" to d.routinesDone.toList(),
         "focusDone" to d.focusDone, "warnedFor" to d.warnedFor,
     )
 
-    private fun dailyIn(m: Map<*, *>) = Daily(
+    fun dailyIn(m: Map<*, *>) = Daily(
         date = m.str("date") ?: "",
         water = m.int("water", 0).coerceIn(0, 99),
         mealsDone = (m["meals"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }?.toSet() ?: emptySet(),
@@ -225,6 +234,8 @@ object Codec {
     }
 
     // ---- defensive accessors ----
+    private fun Map<*, *>.longMap(k: String): Map<String, Long> =
+        (this[k] as? Map<*, *>)?.entries?.mapNotNull { (key, v) -> (key as? String)?.let { kk -> (v as? Number)?.toLong()?.let { kk to it } } }?.toMap() ?: emptyMap()
     private fun Map<*, *>.str(k: String) = this[k] as? String
     private fun Map<*, *>.int(k: String, def: Int) = (this[k] as? Number)?.toInt() ?: def
     private fun Map<*, *>.long(k: String) = (this[k] as? Number)?.toLong()

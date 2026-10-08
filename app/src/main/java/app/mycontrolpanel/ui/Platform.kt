@@ -18,6 +18,15 @@ interface Platform {
     val voiceAvailable: Boolean
     /** Starts speech-to-text; the result arrives in [onText] (never called if cancelled). */
     fun listen(onText: (String) -> Unit)
+    // accounts & sharing
+    fun signIn()
+    fun signOut()
+    fun createSpace(name: String)
+    fun joinSpace(code: String)
+    fun leaveSpace(id: String)
+    fun share(text: String)
+    fun connectGoogleTasks()
+    fun syncGoogleTasksNow()
 }
 
 val LocalPlatform = staticCompositionLocalOf<Platform> { error("Platform not provided") }

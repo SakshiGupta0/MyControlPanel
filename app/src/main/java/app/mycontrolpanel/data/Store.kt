@@ -35,6 +35,9 @@ class Store(
     private val _state: MutableStateFlow<AppState>
     val state: StateFlow<AppState> get() = _state
 
+    /** Called (on the main thread) after any change to persisted data — used by the sync engines. */
+    val dataListeners = ArrayList<(AppData) -> Unit>()
+
     private val _effects = MutableSharedFlow<Effect>(extraBufferCapacity = 16)
     val effects: SharedFlow<Effect> get() = _effects
 
@@ -55,7 +58,7 @@ class Store(
         }
         _state.value = result.state
         val data = result.state.data
-        if (data != old.data) persist(data)
+        if (data != old.data) { persist(data); dataListeners.forEach { it(data) } }
         if (data.routines != old.data.routines) onRoutinesChanged(data)
         for (e in result.effects) {
             if (e is Effect.RetrySave) persist(data) else _effects.tryEmit(e)

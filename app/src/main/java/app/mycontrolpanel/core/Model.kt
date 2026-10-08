@@ -104,6 +104,12 @@ data class Task(
     val doneAt: Long? = null,
     val createdAt: Long = 0,
     val order: Long = 0,
+    /** Shared space this task belongs to (null = personal). */
+    val spaceId: String? = null,
+    /** Linked Google Tasks id, when Google Tasks sync is on. */
+    val googleId: String? = null,
+    /** Who ticked it off (shown in shared spaces). */
+    val doneBy: String? = null,
 )
 
 data class Prefs(
@@ -178,6 +184,19 @@ data class AppData(
     val focus: FocusSession? = null,
     val lastModeKey: String? = null,     // effective mode key last seen by the tick ("free" / mode id / "conflict")
     val modeEnteredAt: Long? = null,
+    // ---- sync bookkeeping (device-local) ----
+    /** Last-modified time per synced item key ("task:abc", "prefs", …). */
+    val meta: Map<String, Long> = emptyMap(),
+    /** Deletion time per item key, so deletes travel to other devices. */
+    val tombs: Map<String, Long> = emptyMap(),
+    /** Shared-space id for deleted shared tasks (where their tombstone must be written). */
+    val tombSpaces: Map<String, String> = emptyMap(),
+    /** Newest version of each key this device has already sent or received. */
+    val synced: Map<String, Long> = emptyMap(),
+    /** Google Tasks ids whose local task was deleted and still need deleting at Google. */
+    val gDeletes: Set<String> = emptySet(),
+    val gLastSync: Long = 0,
+    val gTasksOn: Boolean = false,
 )
 
 // ---- live, not persisted ----
@@ -188,7 +207,19 @@ enum class CalendarStatus { OFF, NEEDS_PERMISSION, OK, ERROR }
 
 data class NowPlaying(val title: String, val artist: String, val app: String, val playing: Boolean)
 
+data class Account(val uid: String, val email: String, val name: String)
+
+data class Space(val id: String, val name: String, val owner: String, val members: Map<String, String>, val inviteCode: String)
+
+enum class SyncStatus { LOCAL_ONLY, CONNECTING, SYNCED, OFFLINE, ERROR }
+
 data class Live(
+    val account: Account? = null,
+    val spaces: List<Space> = emptyList(),
+    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    val syncError: String? = null,
+    val firebaseReady: Boolean = false,
+    val gTasksStatus: String? = null,
     val calendar: List<CalEvent> = emptyList(),
     val calendarStatus: CalendarStatus = CalendarStatus.OFF,
     val nowPlaying: NowPlaying? = null,

@@ -33,6 +33,17 @@ import app.mycontrolpanel.ui.MediaKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -101,6 +112,50 @@ class MainActivity : ComponentActivity() {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it — I'll write it down")
             runCatching { voiceLauncher.launch(i) }.onFailure { store.dispatch(Action.ShowMessage("Voice input isn't available on this tablet.")) }
+        }
+
+        override fun signIn() { googleSignIn() }
+        override fun signOut() {
+            app.sync.signOut()
+            lifecycleScope.launch { runCatching { CredentialManager.create(this@MainActivity).clearCredentialState(ClearCredentialStateRequest()) } }
+        }
+        private fun say(m: String) = store.dispatch(Action.ShowMessage(m))
+        override fun createSpace(name: String) = app.sync.createSpace(name, ::say)
+        override fun joinSpace(code: String) = app.sync.joinSpace(code, ::say)
+        override fun leaveSpace(id: String) = app.sync.leaveSpace(id, ::say)
+        override fun share(text: String) {
+            val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+            runCatching { startActivity(Intent.createChooser(i, "Share invite")) }
+        }
+        override fun connectGoogleTasks() = app.gtasks.connect(gtasksConsent)
+        override fun syncGoogleTasksNow() = app.gtasks.syncNow(gtasksConsent)
+    }
+
+    private val gtasksConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        app.gtasks.onConsentResult(res.data)
+    }
+
+    /** Sign in with Google (Credential Manager) → Firebase Auth. The sync engine notices and starts syncing. */
+    private fun googleSignIn() {
+        val idRes = resources.getIdentifier("default_web_client_id", "string", packageName)
+        if (idRes == 0 || !app.sync.ready) { store.dispatch(Action.ShowMessage("Sign-in isn't set up in this build.")); return }
+        lifecycleScope.launch {
+            try {
+                val option = GetSignInWithGoogleOption.Builder(getString(idRes)).build()
+                val req = GetCredentialRequest.Builder().addCredentialOption(option).build()
+                val cred = CredentialManager.create(this@MainActivity).getCredential(this@MainActivity, req).credential
+                if (cred is CustomCredential && cred.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val g = GoogleIdTokenCredential.createFrom(cred.data)
+                    val user = FirebaseAuth.getInstance().signInWithCredential(GoogleAuthProvider.getCredential(g.idToken, null)).await().user
+                    store.dispatch(Action.ShowMessage("Signed in as ${user?.displayName ?: user?.email ?: "you"}. Syncing…"))
+                } else store.dispatch(Action.ShowMessage("Google sent an unexpected sign-in response. Please try again."))
+            } catch (e: GetCredentialCancellationException) {
+                // user closed the sheet — nothing to say
+            } catch (e: NoCredentialException) {
+                store.dispatch(Action.ShowMessage("No Google account on this tablet. Add one in Android Settings → Accounts, then try again."))
+            } catch (e: Exception) {
+                store.dispatch(Action.ShowMessage("Sign-in didn't work: ${e.message ?: "unknown error"}"))
+            }
         }
     }
 
@@ -199,6 +254,10 @@ class MainActivity : ComponentActivity() {
                     try {
                         while (true) { reloadCalendar(); delay(5 * 60_000L) }
                     } finally { runCatching { contentResolver.unregisterContentObserver(calendarObserver) } }
+                }
+                // Google Tasks: every 10 minutes while the panel is visible (and right away on wake).
+                launch {
+                    while (true) { app.gtasks.syncNow(null); delay(10 * 60_000L) }
                 }
                 // Music: watch what's playing while visible.
                 launch {

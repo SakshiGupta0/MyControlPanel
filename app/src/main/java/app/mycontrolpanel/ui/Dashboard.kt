@@ -122,7 +122,14 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
                 }
             }
             Overwhelmed(s, dispatch)
-            T("My Control Panel · v${LocalPlatform.current.versionName}", Type.small, p.muted.copy(alpha = 0.55f))
+            val sync = when (s.live.syncStatus) {
+                app.mycontrolpanel.core.SyncStatus.SYNCED -> " · synced ✓"
+                app.mycontrolpanel.core.SyncStatus.OFFLINE -> " · offline, will sync later"
+                app.mycontrolpanel.core.SyncStatus.ERROR -> " · sync problem (Settings → Account)"
+                app.mycontrolpanel.core.SyncStatus.CONNECTING -> " · connecting…"
+                app.mycontrolpanel.core.SyncStatus.LOCAL_ONLY -> ""
+            }
+            T("My Control Panel · v${LocalPlatform.current.versionName}$sync", Type.small, p.muted.copy(alpha = 0.6f), Modifier.testTag("footer"))
         }
     }
 }
@@ -343,7 +350,9 @@ fun TaskRow(t: app.mycontrolpanel.core.Task, s: AppState, dispatch: Dispatch, co
             T(t.title, Type.body, if (t.done) p.muted else p.text, maxLines = 2)
             if (!compact) {
                 val modes = t.modeIds.mapNotNull { id -> s.data.modes.find { it.id == id }?.let { "${it.icon} ${it.name}" } }
-                val bits = listOfNotNull(modes.takeIf { it.isNotEmpty() }?.joinToString(" · "), t.notes.takeIf { it.isNotBlank() })
+                val space = t.spaceId?.let { id -> s.live.spaces.find { it.id == id }?.let { "🏠 ${it.name}" } }
+                val bits = listOfNotNull(space, modes.takeIf { it.isNotEmpty() }?.joinToString(" · "),
+                    t.doneBy?.takeIf { t.done }?.let { "done by $it" }, t.notes.takeIf { it.isNotBlank() })
                 if (bits.isNotEmpty()) T(bits.joinToString("  ·  "), Type.small, p.muted, maxLines = 1)
             }
         }

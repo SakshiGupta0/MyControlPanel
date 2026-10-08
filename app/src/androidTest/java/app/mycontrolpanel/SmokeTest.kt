@@ -215,6 +215,16 @@ class SmokeTest {
         rule.onNodeWithTag("doneToday").assertExists()
     }
 
+    @Test
+    fun accountScreenOffersSignInWithoutBreakingLocalUse() {
+        rule.onNodeWithTag("settingsButton").performClick()
+        rule.onNodeWithTag("settingsSection_ACCOUNT").performScrollTo().performClick()
+        rule.waitForIdle()
+        if (store.state.value.live.account == null) rule.onNodeWithTag("signIn").performScrollTo().assertExists()
+        rule.onNodeWithTag("closeSettings").performClick()
+        rule.onNodeWithTag("dashboard").assertIsDisplayed()
+    }
+
     /** Persistence is async (background thread); poll the file like a cold start would read it. */
     private fun waitForDisk(check: (app.mycontrolpanel.core.AppData) -> Boolean) {
         val dir = InstrumentationRegistry.getInstrumentation().targetContext.filesDir
