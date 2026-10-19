@@ -59,6 +59,7 @@ import app.mycontrolpanel.ui.AppRoot
 import app.mycontrolpanel.ui.ContrastPalette
 import app.mycontrolpanel.ui.DayPalette
 import app.mycontrolpanel.ui.LocalPlatform
+import app.mycontrolpanel.ui.LocalSpotify
 import app.mycontrolpanel.ui.NightPalette
 import app.mycontrolpanel.ui.PanelTheme
 import app.mycontrolpanel.ui.Platform
@@ -214,7 +215,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(prefs.calendarOn) { reloadCalendar() }
             val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
-            CompositionLocalProvider(LocalPlatform provides platform, app.mycontrolpanel.ui.LocalSpotify provides app.spotify) {
+            CompositionLocalProvider(LocalPlatform provides platform, LocalSpotify provides app.spotify) {
                 PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
                     AppRoot(s, env, store::dispatch)
                 }

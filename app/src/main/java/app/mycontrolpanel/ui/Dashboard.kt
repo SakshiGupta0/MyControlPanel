@@ -44,6 +44,7 @@ import app.mycontrolpanel.core.Derive
 import app.mycontrolpanel.core.Dialog
 import app.mycontrolpanel.core.Effective
 import app.mycontrolpanel.core.Env
+import app.mycontrolpanel.data.SpotifyEngine.Status as SpStatus
 import app.mycontrolpanel.core.Feature
 import androidx.compose.ui.unit.sp
 import app.mycontrolpanel.core.Focus
@@ -560,7 +561,6 @@ private fun ModeWidgetCard(w: ModeWidget, mode: Mode, s: AppState, env: Env, dis
                 }
                 ModeWidget.CALENDAR -> CalendarWidget(s, env, mode, dispatch)
                 ModeWidget.MUSIC -> MusicWidget(s, mode, dispatch)
-                }
             }
         }
     }
@@ -632,9 +632,8 @@ private fun MusicWidget(s: AppState, mode: Mode, dispatch: Dispatch) {
         QuietButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this device.")) })
         return
     }
-    val St = app.mycontrolpanel.data.SpotifyEngine.Status
     when (sp.status) {
-        St.CONNECTED -> {
+        SpStatus.CONNECTED -> {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val art = sp.art
                 if (art != null) androidx.compose.foundation.Image(art.asImageBitmap(), contentDescription = "Album art",
@@ -657,8 +656,8 @@ private fun MusicWidget(s: AppState, mode: Mode, dispatch: Dispatch) {
                 if (bedtime && uri.startsWith("spotify:")) QuietButton("My sleep playlist", { engine.play(uri) })
             }
         }
-        St.CONNECTING -> T("Connecting to Spotify…", Type.label, p.muted)
-        St.NOT_INSTALLED -> {
+        SpStatus.CONNECTING -> T("Connecting to Spotify…", Type.label, p.muted)
+        SpStatus.NOT_INSTALLED -> {
             T("Install Spotify on this device to play music here.", Type.label, p.muted)
             QuietButton("Get Spotify", { platform.openUri("market://details?id=com.spotify.music") })
         }
