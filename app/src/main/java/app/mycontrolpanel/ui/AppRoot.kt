@@ -96,7 +96,7 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
         s.ui.message?.let { msg ->
             LaunchedEffect(msg) { delay(4500); dispatch(Action.DismissMessage) }
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = if (LocalWindow.current.compact) 96.dp else 28.dp, start = 16.dp, end = 16.dp)
-                .clip(RoundedCornerShape(18.dp)).background(p.text).clickable { dispatch(Action.DismissMessage) }
+                .clip(RoundedCornerShape(18.dp)).background(p.text)   // not clickable: taps pass through to what's underneath
                 .padding(horizontal = 28.dp, vertical = 16.dp).widthIn(max = 760.dp).testTag("message")) {
                 T(msg, Type.label, p.bg)
             }
