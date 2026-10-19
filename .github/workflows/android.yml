@@ -26,7 +26,8 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - name: Core logic tests (scheduler, routines, editors, reset, persistence)
-        run: ./gradlew --no-daemon --console=plain testDebugUnitTest > unit.log 2>&1 || (grep -E "^e: |error:|What went wrong|FAILED|Unresolved|Caused by" unit.log | head -60 | sed 's/^/::error title=build::/' ; exit 1)
+        run: |
+          ./gradlew --no-daemon --console=plain testDebugUnitTest > unit.log 2>&1 || (grep -E "^e: |error:|What went wrong|FAILED|Unresolved|Caused by" unit.log | head -60 | sed 's/^/::error title=build::/' ; exit 1)
       - name: Build release APK
         run: ./gradlew --no-daemon assembleRelease
       - name: Name the APK
