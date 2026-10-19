@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_without_emulator:
+        description: "Publish even if the emulator job failed (only after its tests passed on an earlier run)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -73,6 +78,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Enable KVM
         run: |
+          ls -l /dev/kvm && echo "::notice title=kvm::/dev/kvm present" || echo "::error title=kvm::/dev/kvm missing on this runner"
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
@@ -81,7 +87,7 @@ jobs:
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 31
+          api-level: 29
           target: default
           arch: x86_64
           profile: ${{ matrix.device }}
@@ -95,7 +101,7 @@ jobs:
         if: steps.smoke1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 31
+          api-level: 29
           target: default
           arch: x86_64
           profile: ${{ matrix.device }}
@@ -125,7 +131,7 @@ jobs:
   release:
     name: Publish APK
     needs: [build, ui-tests]
-    if: github.event_name != 'pull_request'
+    if: always() && needs.build.result == 'success' && github.event_name != 'pull_request' && (needs.ui-tests.result == 'success' || inputs.release_without_emulator)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
