@@ -225,7 +225,7 @@ class SmokeTest {
     fun nowCardAndHeadsUpRender() {
         rule.onNodeWithTag("nowCard").assertExists()
         rule.onNodeWithTag("todayCard").assertExists()
-        rule.onNodeWithTag("doneToday").assertExists()
+        rule.onNodeWithTag("doneToday").assertDoesNotExist()   // "Done today" is only in the Everything preset
     }
 
     @Test
