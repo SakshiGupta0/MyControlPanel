@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: [pixel_c, pixel_6]   # tablet + phone
+        device: [pixel_c, pixel_4]   # tablet + phone
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
