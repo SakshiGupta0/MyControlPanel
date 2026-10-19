@@ -49,12 +49,14 @@ import kotlinx.coroutines.delay
 fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val reduceMotion = LocalReduceMotion.current
-    Box(Modifier.fillMaxSize().background(p.bg)) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(p.bg)) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalWindow provides WindowInfo(maxWidth, maxHeight)) {
+      Box(Modifier.fillMaxSize()) {
         // Key the transition by screen *kind* so typing in an editor doesn't re-animate.
         val kind = when (s.ui.screen) {
             Screen.Dashboard -> "dashboard"; Screen.RunningRoutine -> "routine"
             is Screen.Settings -> "settings"; is Screen.ModeEditor -> "modeEditor"; is Screen.RoutineEditor -> "routineEditor"
-            is Screen.Tasks -> "tasks"; Screen.Focus -> "focus"
+            is Screen.Tasks -> "tasks"; Screen.Focus -> "focus"; is Screen.Onboarding -> "onboarding"
         }
         AnimatedContent(targetState = kind, label = "screen",
             transitionSpec = { if (reduceMotion) fadeIn(tween(0)) togetherWith fadeOut(tween(0)) else fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }
@@ -68,6 +70,7 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
                 is Screen.RoutineEditor -> if (k == "routineEditor") RoutineEditor(s, sc, dispatch)
                 is Screen.Tasks -> if (k == "tasks") TasksScreen(s, sc.filter, env, dispatch)
                 Screen.Focus -> if (k == "focus") FocusScreen(s, dispatch)
+                is Screen.Onboarding -> if (k == "onboarding") OnboardingScreen(s, sc, dispatch)
             }
         }
 
@@ -92,13 +95,15 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
 
         s.ui.message?.let { msg ->
             LaunchedEffect(msg) { delay(4500); dispatch(Action.DismissMessage) }
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp)
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = if (LocalWindow.current.compact) 96.dp else 28.dp, start = 16.dp, end = 16.dp)
                 .clip(RoundedCornerShape(18.dp)).background(p.text).clickable { dispatch(Action.DismissMessage) }
                 .padding(horizontal = 28.dp, vertical = 16.dp).widthIn(max = 760.dp).testTag("message")) {
                 T(msg, Type.label, p.bg)
             }
         }
     }
+      }
+      }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

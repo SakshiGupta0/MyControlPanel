@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +47,41 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
     val p = P()
+    val win = LocalWindow.current
+    val content: @Composable () -> Unit = {
+        T(section.label, if (win.compact) Type.title else Type.display)
+        when (section) {
+            SettingsSection.MODES -> ModesSection(s, dispatch)
+            SettingsSection.ROUTINES -> RoutinesSection(s, dispatch)
+            SettingsSection.WIDGETS -> WidgetsSection(s, dispatch)
+            SettingsSection.TASKS -> TasksSection(s, dispatch)
+            SettingsSection.CALENDAR -> CalendarSection(s, dispatch)
+            SettingsSection.MUSIC -> MusicSection(s, dispatch)
+            SettingsSection.APPEARANCE -> AppearanceSection(s, dispatch)
+            SettingsSection.DEVICE -> DeviceSection(s, dispatch)
+            SettingsSection.ACCOUNT -> AccountSection(s, dispatch)
+            SettingsSection.RESET -> ResetSection(dispatch)
+            SettingsSection.ABOUT -> AboutSection()
+        }
+        Spacer(Modifier.height(40.dp))
+    }
+    if (win.compact) {
+        // Phone: back button + a swipeable row of sections on top, content below.
+        Column(Modifier.fillMaxSize().background(p.bg).testTag("settingsScreen")) {
+            Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeSettings")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsSection.values().forEach { sec ->
+                        Chip(sec.label, sec == section, { dispatch(Action.OpenSettings(sec)) }, tag = "settingsSection_${sec.name}")
+                    }
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
+        }
+        return
+    }
     Row(Modifier.fillMaxSize().background(p.bg).testTag("settingsScreen")) {
         // left rail
         Column(Modifier.width(270.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
@@ -61,25 +99,8 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
                 ) { T(sec.label, if (sel) Type.heading else Type.label, if (sel) p.text else p.muted) }
             }
         }
-        // content
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 40.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            T(section.label, Type.display)
-            when (section) {
-                SettingsSection.MODES -> ModesSection(s, dispatch)
-                SettingsSection.ROUTINES -> RoutinesSection(s, dispatch)
-                SettingsSection.WIDGETS -> WidgetsSection(s, dispatch)
-                SettingsSection.TASKS -> TasksSection(s, dispatch)
-                SettingsSection.CALENDAR -> CalendarSection(s, dispatch)
-                SettingsSection.MUSIC -> MusicSection(s, dispatch)
-                SettingsSection.APPEARANCE -> AppearanceSection(s, dispatch)
-                SettingsSection.DEVICE -> DeviceSection(s, dispatch)
-                SettingsSection.ACCOUNT -> AccountSection(s, dispatch)
-                SettingsSection.RESET -> ResetSection(dispatch)
-                SettingsSection.ABOUT -> AboutSection()
-            }
-            Spacer(Modifier.height(40.dp))
-        }
+            verticalArrangement = Arrangement.spacedBy(18.dp)) { content() }
     }
 }
 
@@ -145,11 +166,45 @@ private fun RoutinesSection(s: AppState, dispatch: Dispatch) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WidgetsSection(s: AppState, dispatch: Dispatch) {
     val p = P()
     val pr = s.data.prefs
-    T("These widgets are on the dashboard in every mode. Mode-specific widgets are chosen and ordered inside each mode (Settings → Modes → Edit).", Type.body, p.muted)
+    val current = app.mycontrolpanel.core.Onboarding.profileOf(pr.features)
+    T("Choose how much this device shows. Each device keeps its own choice — your phone can be simple while the wall panel shows everything.", Type.body, p.muted)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        app.mycontrolpanel.core.Profile.values().forEach { prof ->
+            val sel = prof == current
+            PanelCard(Modifier.widthIn(min = 220.dp, max = 340.dp).clickable {
+                dispatch(Action.SetFeatures(app.mycontrolpanel.core.Onboarding.preset(prof)))
+            }.testTag("preset_${prof.name}"), tint = if (sel) p.accentSoft else null) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    T((if (sel) "✓  " else "") + prof.label, Type.heading)
+                    T(prof.blurb, Type.small, p.muted)
+                }
+            }
+        }
+    }
+    if (current == null) T("Custom mix", Type.label, p.accent)
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column {
+            T("What's on the dashboard", Type.heading)
+            app.mycontrolpanel.core.Feature.values().forEach { feat ->
+                ToggleRow(feat.label, feat in pr.features, { on ->
+                    dispatch(Action.SetFeatures(if (on) pr.features + feat else pr.features - feat))
+                }, sub = feat.hint, tag = "feature_${feat.name}")
+            }
+            T("Mode widgets (tasks, routines, focus, calendar, music) are chosen per mode in Settings → Modes → Edit.", Type.small, p.muted)
+        }
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("Set up again", Type.heading)
+            T("Answer the setup questions again. This can change your mode times and dashboard.", Type.small, p.muted)
+            SecondaryButton("Run setup again", { dispatch(Action.StartOnboarding) }, tag = "runSetup")
+        }
+    }
     PanelCard(Modifier.fillMaxWidth()) {
         Column {
             T("Water", Type.heading)
@@ -236,7 +291,18 @@ private fun CalendarSection(s: AppState, dispatch: Dispatch) {
 private fun MusicSection(s: AppState, dispatch: Dispatch) {
     val p = P()
     val platform = LocalPlatform.current
-    T("Spotify is opened with Android's normal links. This app doesn't control playback or log in to Spotify.", Type.body, p.muted)
+    T("Add the Music widget to a mode (Settings → Modes → Edit) to see what's playing on Spotify, with album art and controls, and to pick something to play. It uses Spotify's official connection through the Spotify app — playback control needs Spotify Premium. Your Spotify password never touches this app.", Type.body, p.muted)
+    LocalSpotify.current?.let { eng ->
+        val st = eng.state.collectAsState().value
+        T("Spotify: " + when (st.status) {
+            app.mycontrolpanel.data.SpotifyEngine.Status.CONNECTED -> "connected ✓"
+            app.mycontrolpanel.data.SpotifyEngine.Status.NOT_CONFIGURED -> "not set up in this build"
+            app.mycontrolpanel.data.SpotifyEngine.Status.NOT_INSTALLED -> "app not installed"
+            else -> st.message ?: "not connected"
+        }, Type.label, p.muted)
+        if (st.status != app.mycontrolpanel.data.SpotifyEngine.Status.CONNECTED && st.status != app.mycontrolpanel.data.SpotifyEngine.Status.NOT_CONFIGURED)
+            PrimaryButton("Connect Spotify", { eng.connect(interactive = true) })
+    }
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             T("Sleep playlist", Type.heading)
@@ -377,38 +443,26 @@ private fun AccountSection(s: AppState, dispatch: Dispatch) {
     }
     var newName by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        PanelCard(Modifier.weight(1f)) {
+    AdaptivePair(
+        { m -> PanelCard(m) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 T("Create a space", Type.heading)
                 PanelTextField(newName, { newName = it }, "Name, e.g. Flat chores", tag = "spaceName")
                 PrimaryButton("Create", { platform.createSpace(newName); newName = "" }, enabled = newName.isNotBlank(), tag = "createSpace")
             }
-        }
-        PanelCard(Modifier.weight(1f)) {
+        } },
+        { m -> PanelCard(m) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 T("Join with a code", Type.heading)
                 PanelTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, "6-letter code", tag = "joinCode")
                 PrimaryButton("Join", { platform.joinSpace(code); code = "" }, enabled = code.length == 6, tag = "joinSpace")
             }
-        }
-    }
+        } },
+    )
 
     // ---- Google Tasks ----
     T("Google Tasks", Type.title)
-    PanelCard(Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            T("Keep your personal tasks in step with Google Tasks (“My Tasks” list) — add on your phone in Google Tasks, see it here, and the other way round. Shared-space tasks stay out of Google.", Type.body, p.muted)
-            s.live.gTasksStatus?.let { T(it, Type.label, p.muted, Modifier.testTag("gtasksStatus")) }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (!s.data.gTasksOn) PrimaryButton("Connect Google Tasks", { platform.connectGoogleTasks() }, tag = "connectGTasks")
-                else {
-                    SecondaryButton("Sync now", { platform.syncGoogleTasksNow() })
-                    QuietButton("Turn off", { dispatch(Action.SetGoogleTasks(false)) }, color = p.muted)
-                }
-            }
-        }
-    }
+    GoogleTasksCard(s, dispatch)
 }
 
 @Composable
@@ -434,6 +488,46 @@ private fun AboutSection() {
             T("Accounts (Sign in with Google), sync across your devices, shared task spaces, Google Tasks two-way sync.", Type.body, p.muted)
             T("Fonts: Fraunces and DM Sans (SIL Open Font License).", Type.small, p.muted)
             T("Without an account everything stays on this tablet. Signed in, your data is stored in your own Firebase project and only you (and people in spaces you share) can read it.", Type.body, p.muted)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GoogleTasksCard(s: AppState, dispatch: Dispatch) {
+    val p = P()
+    val platform = LocalPlatform.current
+    var picking by remember { mutableStateOf(false) }
+    var copyExisting by remember { mutableStateOf(false) }
+    val pr = s.data.prefs
+    val showPicker = picking || (!s.data.gTasksOn && s.live.gLists.isNotEmpty())
+    PanelCard(Modifier.fillMaxWidth().testTag("gtasksCard")) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("Sync one Google Tasks list with the app. Organise everything else in Google Tasks however you like — only the list you pick shows up here, and tasks you add here go into that list.", Type.body, p.muted)
+            if (s.data.gTasksOn) T("Syncing with:  ${pr.gListTitle}", Type.heading)
+            s.live.gTasksStatus?.let { T(it, Type.label, p.muted, Modifier.testTag("gtasksStatus")) }
+            if (showPicker) {
+                T("Which list?", Type.label, p.muted)
+                if (s.live.gLists.isEmpty()) T("Loading your lists…", Type.small, p.muted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    s.live.gLists.forEach { (id, title) ->
+                        Chip(title, s.data.gTasksOn && id == pr.gListId, {
+                            dispatch(Action.ChooseGList(id, title, copyExisting)); picking = false
+                        }, tag = "glist_$title")
+                    }
+                    if (s.live.gLists.none { it.second == "Control Panel" })
+                        Chip("＋ New list “Control Panel”", false, { platform.createGList("Control Panel", copyExisting); picking = false })
+                }
+                ToggleRow("Also copy tasks I already have in the app into this list", copyExisting, { copyExisting = it })
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!s.data.gTasksOn && s.live.gLists.isEmpty()) PrimaryButton("Connect Google Tasks", { platform.connectGoogleTasks() }, tag = "connectGTasks")
+                if (s.data.gTasksOn) {
+                    SecondaryButton("Sync now", { platform.syncGoogleTasksNow() })
+                    SecondaryButton(if (picking) "Cancel" else "Change list", { if (!picking) platform.loadGLists(); picking = !picking })
+                    QuietButton("Turn off", { dispatch(Action.SetGoogleTasks(false)) }, color = p.muted)
+                }
+            }
         }
     }
 }

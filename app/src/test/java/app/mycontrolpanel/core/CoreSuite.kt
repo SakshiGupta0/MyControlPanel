@@ -28,7 +28,7 @@ object CoreSuite {
             ScheduleResult.Free -> "free"
         }
 
-    private fun st0(day: Int = 5, h: Int = 12) = Reducer.initial(Defaults.data(), t(day, h), env)
+    private fun st0(day: Int = 5, h: Int = 12) = Reducer.initial(Defaults.data().copy(onboarded = true), t(day, h), env)
     private fun AppState.go(a: Action, now: Long = this.now) = Reducer.reduce(this, a, now, env).state
     private fun AppState.eff() = Scheduler.effective(data, now, zone)
 
@@ -266,9 +266,9 @@ object CoreSuite {
             s = s.go(Action.Tick, t(5, 7, 31)); eq(listOf("r_morning"), Derive.prompts(s, env).map { it.id }, "prompted")
             s = s.go(Action.DismissPrompt("r_morning")); eq(0, Derive.prompts(s, env).size, "dismissed")
             s = s.go(Action.Tick, t(5, 7, 40)); eq(0, Derive.prompts(s, env).size, "not re-prompted")
-            val late = Reducer.initial(Defaults.data(), t(6, 9, 30), env); eq(0, Derive.prompts(late, env).size, "outside window")
-            val weekend = Reducer.initial(Defaults.data(), t(10, 7, 35), env); eq(0, Derive.prompts(weekend, env).size, "weekdays only")
-            val started = Reducer.initial(Defaults.data(), t(7, 7, 35), env).go(Action.StartRoutine("r_morning")).go(Action.ExitRoutine)
+            val late = Reducer.initial(Defaults.data().copy(onboarded = true), t(6, 9, 30), env); eq(0, Derive.prompts(late, env).size, "outside window")
+            val weekend = Reducer.initial(Defaults.data().copy(onboarded = true), t(10, 7, 35), env); eq(0, Derive.prompts(weekend, env).size, "weekdays only")
+            val started = Reducer.initial(Defaults.data().copy(onboarded = true), t(7, 7, 35), env).go(Action.StartRoutine("r_morning")).go(Action.ExitRoutine)
             eq(0, Derive.prompts(started, env).size, "starting it clears the prompt")
         },
 
@@ -284,7 +284,7 @@ object CoreSuite {
 
         "conflict on the dashboard is resolved by an explicit pick" to {
             val gym = Mode("gym", "Gym", "g", 11 * 60, 13 * 60, setOf(1))
-            var s = Reducer.initial(Defaults.data().copy(modes = Defaults.modes() + gym), t(5, 12), env)
+            var s = Reducer.initial(Defaults.data().copy(onboarded = true).copy(modes = Defaults.modes() + gym), t(5, 12), env)
             ok(s.eff() is Effective.Conflict, "conflict shown, not guessed")
             s = s.go(Action.PickConflictMode("gym")); eq("gym", s.eff().key, "picked")
             eq(t(5, 13), s.data.override?.until, "only until the schedule changes")
@@ -446,7 +446,7 @@ object CoreSuite {
             var a = st0(5, 12)
             a = a.go(Action.ApplyRemote(emptyList(), accountWasEmpty = true)); a = push(a)
             ok(server.containsKey("mode:work") && server.containsKey("prefs"), "first device uploaded everything")
-            var b = pull(Reducer.initial(Defaults.data(), t(5, 12), env))
+            var b = pull(Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env))
             eq(a.data.modes, b.data.modes, "second device took the account's modes")
             a = a.go(Action.Capture("buy milk"), t(5, 12, 1)); a = push(a)
             b = b.go(Action.AddWater(2), t(5, 12, 2)); b = push(b)
@@ -463,7 +463,7 @@ object CoreSuite {
         },
 
         "sync: deletes travel; a newer edit resurrects" to {
-            val base = Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.Capture("x"))
+            val base = Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env).go(Action.Capture("x"))
             val id = base.data.tasks.single().id
             val del = base.go(Action.DeleteTask(id), t(5, 13))
             val delDocs = Sync.outgoing(del.data)
@@ -478,20 +478,20 @@ object CoreSuite {
         },
 
         "sync: device-only settings stay on the device" to {
-            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            var s = Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env)
             s = s.go(Action.MarkSent(Sync.outgoing(s.data)))
             s = s.go(Action.UpdatePrefs(s.data.prefs.copy(textScale = 1.3f, keepScreenOn = false, fullscreen = false)))
             ok(Sync.outgoing(s.data).none { it.key == "prefs" }, "text size / screen not synced")
             s = s.go(Action.UpdatePrefs(s.data.prefs.copy(use24h = true)))
             ok(Sync.outgoing(s.data).any { it.key == "prefs" }, "24h clock synced")
-            val other = Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.UpdatePrefs(Prefs(textScale = 0.9f)))
+            val other = Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env).go(Action.UpdatePrefs(Prefs(textScale = 0.9f)))
                 .go(Action.ApplyRemote(Sync.outgoing(s.data)))
             ok(other.data.prefs.use24h, "remote pref applied"); eq(0.9f, other.data.prefs.textScale, "local text size kept")
-            ok(Sync.outgoing(Reducer.initial(Defaults.data(), t(5, 12), env).go(Action.StartRoutine("r_lunch")).data).none { it.key.startsWith("run") }, "routine in progress is local")
+            ok(Sync.outgoing(Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env).go(Action.StartRoutine("r_lunch")).data).none { it.key.startsWith("run") }, "routine in progress is local")
         },
 
         "sync: shared space tasks, tombstones and leaving a space" to {
-            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            var s = Reducer.initial(Defaults.data().copy(onboarded = true), t(5, 12), env)
             s = s.go(Action.EditTask(null)).let { it.go(Action.UpdateTaskDraft((it.ui.dialog as Dialog.TaskEditor).task.copy(title = "bins out", spaceId = "flat"))) }.go(Action.SaveTask)
             val out = Sync.outgoing(s.data).single { it.key.startsWith("task:") }
             eq("flat", out.spaceId, "goes to the space")
@@ -535,6 +535,100 @@ object CoreSuite {
             eq(setOf("G2"), r5.remoteDeletes, "delete at Google"); ok(r5.localUpserts.none { it.title == "linked" }, "not re-imported")
             st = st.go(Action.ApplyGTasks(r5, 4000))
             ok(st.data.gDeletes.isEmpty(), "queue cleared: ${st.data.gDeletes} handled=${r5.handledGDeletes}")
+        },
+
+        "onboarding: fresh install starts in setup; skip lands on the dashboard" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            ok(s.ui.screen is Screen.Onboarding, "setup first")
+            s = s.go(Action.OnbSkip); eq(Screen.Dashboard, s.ui.screen, "skipped"); ok(s.data.onboarded, "remembered")
+            ok(Reducer.initial(Codec.decode(Codec.encode(s.data)), t(5, 13), env).ui.screen == Screen.Dashboard, "not asked again")
+            val v2 = Codec.decode("""{"schema":2,"modes":[],"routines":[]}""")
+            ok(v2.onboarded, "upgrades from v0.2/v0.3 are not sent through setup")
+        },
+
+        "onboarding: answers shape the dashboard and the day" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            val a = OnboardingAnswers(use = DeviceUse.PHONE, profile = Profile.SIMPLE, needs = setOf(Need.WATER, Need.CALM),
+                worksWeekdays = true, wake = 6 * 60 + 30, workStart = 9 * 60, workEnd = 17 * 60 + 30, sleep = 30)  // 00:30
+            s = s.go(Action.OnbUpdate(a)); repeat(6) { s = s.go(Action.OnbNext) }
+            eq(Screen.Dashboard, s.ui.screen, "finished after last step")
+            val f = s.data.prefs.features
+            eq(Onboarding.SIMPLE_CORE + setOf(Feature.WATER, Feature.OVERWHELMED), f, "simple + what was asked for")
+            ok(!s.data.prefs.keepScreenOn && !s.data.prefs.fullscreen, "phone behaviour")
+            eq(6 * 60 + 30 to 9 * 60, s.data.modes.first { it.id == "morning" }.let { it.start to it.end }, "morning")
+            eq(17 * 60 + 30 to 30, s.data.modes.first { it.id == "evening" }.let { it.start to it.end }, "evening to 00:30")
+            eq(0, Scheduler.conflicts(s.data.modes).size, "no overlaps")
+            var tm = lt(5, 0)
+            while (tm.isBefore(lt(12, 0))) { ok(Scheduler.resolve(s.data.modes, tm) is ScheduleResult.Active, "gap at $tm"); tm = tm.plusMinutes(15) }
+            eq("bedtime", modeAt(s.data.modes, 6, 0, 45), "after midnight → bedtime")
+            eq(NotifyStyle.NONE, s.data.routines.first { it.id == "r_morning" }.schedule?.notify, "no routine nagging unless asked")
+        },
+
+        "onboarding: no fixed work week, invalid times are refused" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.OnbUpdate(OnboardingAnswers(worksWeekdays = false)))
+            repeat(4) { s = s.go(Action.OnbNext) }
+            eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on the day step")
+            val bad = (s.ui.screen as Screen.Onboarding).answers.copy(workStart = 6 * 60, wake = 8 * 60)
+            s = s.go(Action.OnbUpdate(bad)).go(Action.OnbNext)
+            eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "blocked"); ok(s.ui.message!!.contains("order"), "explains")
+            s = s.go(Action.OnbUpdate(OnboardingAnswers(worksWeekdays = false))).go(Action.OnbNext).go(Action.OnbNext)
+            ok(!s.data.modes.first { it.id == "work" }.scheduled, "work becomes manual")
+            eq((1..7).toSet(), s.data.modes.first { it.id == "dayoff" }.days, "every day is a day-off shape")
+            eq(0, Scheduler.conflicts(s.data.modes).size, "still no overlaps")
+            s = s.go(Action.Back); eq(Screen.Dashboard, s.ui.screen, "back on dashboard does nothing")
+        },
+
+        "onboarding: signing in to an existing account only asks device questions" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.AccountChanged(Account("u", "e", "Sakshi"), true))
+            val remoteMode = Sync.Doc("mode:work", t(5, 11), false, Json.write(Codec.modeOut(Defaults.modes()[1].copy(name = "Office"))))
+            s = s.go(Action.ApplyRemote(listOf(remoteMode)))
+            val sc = s.ui.screen as Screen.Onboarding
+            ok(sc.returning, "returning"); eq(OnbStep.DEVICE, sc.current, "moved past welcome")
+            eq(listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.READY), sc.steps, "short path")
+            s = s.go(Action.OnbUpdate(sc.answers.copy(profile = Profile.EVERYTHING))).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext)
+            eq(Screen.Dashboard, s.ui.screen, "done")
+            eq("Office", s.data.modes.first { it.id == "work" }.name, "synced setup untouched")
+            eq(Feature.values().toSet(), s.data.prefs.features, "device shows everything")
+            ok(Sync.outgoing(s.data).none { it.key == "prefs" && it.json.contains("features") }, "features stay on this device")
+        },
+
+        "onboarding: account data arriving late still protects the synced setup" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.AccountChanged(Account("u", "e", "Sakshi"), true))
+            repeat(4) { s = s.go(Action.OnbNext) }   // impatient: already on the day step
+            eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on day step")
+            val remoteMode = Sync.Doc("mode:work", t(5, 11), false, Json.write(Codec.modeOut(Defaults.modes()[1].copy(start = 8 * 60))))
+            s = s.go(Action.ApplyRemote(listOf(remoteMode)))
+            val sc = s.ui.screen as Screen.Onboarding
+            ok(sc.returning, "switched to returning"); eq(OnbStep.READY, sc.current, "skips the day questions")
+            s = s.go(Action.OnbNext)
+            eq(8 * 60, s.data.modes.first { it.id == "work" }.start, "synced work time untouched")
+        },
+
+        "features gate heads-up and routine prompts" to {
+            var s = st0(5, 18).go(Action.SetFeatures(Onboarding.SIMPLE_CORE))
+            val r = Reducer.reduce(s, Action.Tick, t(5, 18, 25), env)
+            ok(!r.effects.contains(Effect.Chime), "no chime when heads-up is off"); eq(null, Derive.transitionSoon(r.state, env), "no card")
+            s = Reducer.initial(Defaults.data().copy(onboarded = true, prefs = Prefs(features = Onboarding.SIMPLE_CORE)), t(5, 7, 31), env)
+            eq(0, Derive.prompts(s, env).size, "no routine prompt when off")
+            eq(Profile.SIMPLE, Onboarding.profileOf(Onboarding.SIMPLE_CORE), "preset detection")
+            eq(null, Onboarding.profileOf(Onboarding.SIMPLE_CORE + Feature.WATER), "custom mix")
+        },
+
+        "google tasks: choosing one list unlinks and only copies new tasks" to {
+            var s = st0().go(Action.Capture("old task"))
+            s = s.copy(data = s.data.copy(tasks = s.data.tasks.map { it.copy(googleId = "X1") }))
+            s = s.go(Action.ChooseGList("L2", "Control Panel", copyExisting = false), s.now + 1000)
+            eq("L2", s.data.prefs.gListId, "list chosen"); ok(s.data.tasks.all { it.googleId == null }, "unlinked")
+            ok(s.data.gTasksOn && s.data.gLastSync == 0L, "fresh sync")
+            s = s.go(Action.Capture("new task"), s.now + 2000)
+            val plan = GTasksPlan.plan(s.data, emptyList()) { "n" }
+            eq(listOf("new task"), plan.remoteCreates.map { it.title }, "only tasks made after choosing")
+            val all = s.go(Action.ChooseGList("L2", "Control Panel", copyExisting = true), s.now + 3000)
+            eq(2, GTasksPlan.plan(all.data, emptyList()) { "n" }.remoteCreates.size, "copy existing too")
+            ok(Sync.outgoing(s.data).any { it.key == "prefs" && it.json.contains("L2") }, "list choice syncs to other devices")
         },
     )
 

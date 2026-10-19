@@ -1,6 +1,8 @@
 package app.mycontrolpanel.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,7 @@ fun fmtTimer(ms: Long): String {
 }
 
 /** Full-screen guided routine (PRD §16–19): exactly one step at a time. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
     val p = P()
@@ -45,8 +48,9 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
     }
 
     val tint = LocalModeTint.current
+    val padH = if (LocalWindow.current.compact) LocalWindow.current.gutter else 48.dp
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(lerpColor(tint, p.bg, 0.45f), p.bg2)))
-        .padding(horizontal = 48.dp, vertical = 32.dp).testTag("routineScreen")) {
+        .padding(horizontal = padH, vertical = 24.dp).testTag("routineScreen")) {
         if (run.completed) {
             // Return automatically after a moment so the panel never gets stuck here.
             LaunchedEffect(run.startedAt) { delay(12_000); dispatch(Action.FinishRoutine) }
@@ -85,7 +89,15 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
             }
 
             // the one step — words on the left, the visual (timer ring / breathing) on the right
-            Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+            val compactUi = LocalWindow.current.compact
+            val visualSize = if (compactUi) 220.dp else 300.dp
+            // Wide: words left, visual right. Phone: stacked, scrollable.
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.weight(1f).fillMaxWidth().let { if (compactUi) it.verticalScroll(rememberScrollState()) else it },
+                horizontalArrangement = Arrangement.spacedBy(40.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
+                maxItemsInEachRow = if (compactUi) 1 else 2,
+            ) {
                 val visual = remaining != null || step.breathing
                 Column(Modifier.weight(1f), horizontalAlignment = if (visual) Alignment.Start else Alignment.CenterHorizontally) {
                     T(step.title, Type.display.copy(fontSize = 56.sp, lineHeight = 64.sp), align = if (visual) TextAlign.Start else TextAlign.Center,
@@ -108,11 +120,11 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
                     }
                 }
                 if (step.breathing) {
-                    BreathingGuide(Modifier.size(300.dp))
+                    BreathingGuide(Modifier.size(visualSize).align(Alignment.CenterVertically))
                 } else if (remaining != null) {
                     val total = step.durationSec * 1000L
                     val finished = remaining == 0L
-                    Box(Modifier.size(300.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(visualSize).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
                         ProgressRing(remaining.toFloat() / total, Modifier.fillMaxSize(), stroke = 18.dp,
                             color = if (finished) p.warm else p.accent, track = p.card.copy(alpha = 0.8f))
                         T(if (finished) "Time's up" else fmtTimer(remaining),
@@ -124,7 +136,7 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
 
             // controls: DONE is the biggest, easiest target; Back is smaller and to the side
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                SecondaryButton("‹  Back", { dispatch(Action.RoutineBack) }, Modifier.widthIn(min = 160.dp), tag = "backStep", enabled = run.index > 0)
+                SecondaryButton("‹  Back", { dispatch(Action.RoutineBack) }, Modifier.widthIn(min = if (LocalWindow.current.compact) 100.dp else 160.dp), tag = "backStep", enabled = run.index > 0)
                 PrimaryButton(if (run.index == r.steps.size - 1) "DONE  ·  finish" else "DONE",
                     { dispatch(Action.RoutineDone) }, Modifier.weight(1f), tag = "doneButton", tall = 96.dp,
                     style = Type.display.copy(fontSize = 34.sp))

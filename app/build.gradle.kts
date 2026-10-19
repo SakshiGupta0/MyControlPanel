@@ -14,9 +14,11 @@ android {
         applicationId = "app.mycontrolpanel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 5
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Spotify developer app Client ID (public identifier, not a secret)
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${(project.findProperty("spotifyClientId") as String?) ?: ""}\"")
     }
 
     // One fixed key for every build, so a new APK installs over the old one and keeps your data.
@@ -72,6 +74,9 @@ dependencies {
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    // Spotify App Remote SDK (official AAR from github.com/spotify/android-sdk) + its JSON dependency
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    implementation("com.google.code.gson:gson:2.10.1")
 
     testImplementation("junit:junit:4.13.2")
 

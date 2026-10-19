@@ -42,7 +42,7 @@ object GTasksPlan {
         }
         for (t in personal) {
             val gid = t.googleId
-            if (gid == null) { if (!t.done) creates += t; continue }
+            if (gid == null) { if (!t.done && t.createdAt >= d.gPushAfter) creates += t; continue }
             val r = byId[gid]
             if (r == null || r.deleted) {
                 if (last > 0) localDel += t.id                       // deleted at Google since we last synced

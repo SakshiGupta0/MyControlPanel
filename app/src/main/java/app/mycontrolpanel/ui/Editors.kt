@@ -45,7 +45,22 @@ import app.mycontrolpanel.core.fmtMinutes
 @Composable
 private fun EditorFrame(title: String, problem: String?, dispatch: Dispatch, onSave: () -> Unit, left: @Composable () -> Unit, right: @Composable () -> Unit) {
     val p = P()
+    val win = LocalWindow.current
     Column(Modifier.fillMaxSize().background(p.bg).testTag("editorScreen")) {
+        if (win.compact) {
+            Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SecondaryButton("Cancel", { dispatch(Action.CancelEdit) }, tag = "cancelEdit")
+                    Spacer(Modifier.weight(1f))
+                    PrimaryButton("Save", onSave, tag = "saveButton", enabled = problem == null)
+                }
+                T(title, Type.title, modifier = Modifier.padding(top = 6.dp))
+                if (problem != null) T(problem, Type.small, p.warn)
+            }
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)) { left(); right(); Spacer(Modifier.height(40.dp)) }
+            return@Column
+        }
         Row(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             SecondaryButton("Cancel", { dispatch(Action.CancelEdit) }, tag = "cancelEdit")
             T(title, Type.title, modifier = Modifier.weight(1f).padding(horizontal = 24.dp))
@@ -83,9 +98,8 @@ fun ModeEditor(s: AppState, ed: Screen.ModeEditor, dispatch: Dispatch) {
                     ToggleRow("Runs on schedule", m.scheduled, { set(m.copy(scheduled = it)) },
                         sub = if (m.scheduled) "Switches on automatically at these times" else "Manual only — pick it from the mode button when you need it",
                         tag = "scheduleSwitch")
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         TimeField("Starts", m.start, use24h, { set(m.copy(start = it)) }, tag = "startTime")
-                        T("→", Type.title, p.muted)
                         TimeField("Ends", m.end, use24h, { set(m.copy(end = it)) }, tag = "endTime")
                     }
                     if (m.end < m.start) T("Crosses midnight — ends the next morning. Days below are the days it starts.", Type.small, p.muted)
@@ -253,13 +267,16 @@ fun RoutineEditor(s: AppState, ed: Screen.RoutineEditor, dispatch: Dispatch) {
                             )
                             if (bits.isNotEmpty()) T(bits.joinToString(" · "), Type.small, p.muted, maxLines = 1)
                         }
-                        RoundIconButton("↑", { dispatch(Action.MoveStep(i, -1)) }, enabled = i > 0, size = 48.dp)
+                        val bs = if (LocalWindow.current.compact) 44.dp else 48.dp
+                        RoundIconButton("↑", { dispatch(Action.MoveStep(i, -1)) }, enabled = i > 0, size = bs)
                         Spacer(Modifier.width(6.dp))
-                        RoundIconButton("↓", { dispatch(Action.MoveStep(i, 1)) }, enabled = i < r.steps.size - 1, size = 48.dp)
+                        RoundIconButton("↓", { dispatch(Action.MoveStep(i, 1)) }, enabled = i < r.steps.size - 1, size = bs)
                         Spacer(Modifier.width(6.dp))
-                        RoundIconButton("✎", { dispatch(Action.EditStep(i)) }, size = 48.dp, tag = "editStep_$i")
-                        Spacer(Modifier.width(6.dp))
-                        RoundIconButton("✕", { dispatch(Action.DeleteStep(i)) }, size = 48.dp, tag = "deleteStep_$i")
+                        if (!LocalWindow.current.compact) {
+                            RoundIconButton("✎", { dispatch(Action.EditStep(i)) }, size = bs, tag = "editStep_$i")
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        RoundIconButton("✕", { dispatch(Action.DeleteStep(i)) }, size = bs, tag = "deleteStep_$i")
                     }
                 }
             }

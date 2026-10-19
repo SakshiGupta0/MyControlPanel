@@ -67,11 +67,47 @@ class GoogleTasksSync(private val ctx: Context, private val store: Store) {
         } catch (e: Exception) { status("Google Tasks wasn't connected (${e.message ?: "cancelled"}).") }
     }
 
+    /** After permission is granted: show the user's lists so they can choose which one syncs. */
     private fun enableAndSync() {
-        main.post {
-            store.dispatch(Action.SetGoogleTasks(true))
-            syncNow(interactive = null)
-        }
+        if (store.state.value.data.gTasksOn) main.post { syncNow(interactive = null) } else loadLists()
+    }
+
+    /** Fetch the user's Google Tasks lists (for the list picker). */
+    fun loadLists() {
+        withToken { io.execute {
+            try {
+                val root = Json.parse(call("GET", "$API/users/@me/lists?maxResults=100")) as? Map<*, *>
+                val lists = (root?.get("items") as? List<*>)?.mapNotNull { i ->
+                    val m = i as? Map<*, *> ?: return@mapNotNull null
+                    val id = m["id"] as? String ?: return@mapNotNull null
+                    id to (m["title"] as? String ?: "Untitled")
+                } ?: emptyList()
+                main.post { store.dispatch(Action.GListsLoaded(lists)); store.dispatch(Action.GTasksStatus(if (lists.isEmpty()) "No lists found." else null)) }
+            } catch (e: HttpError) { status(explain(e.body)) } catch (e: Exception) { status("Couldn't load your lists (${e.message ?: "network"}).") }
+        } }
+    }
+
+    /** Create a new list in Google Tasks and sync with it. */
+    fun createList(title: String, copyExisting: Boolean) {
+        withToken { io.execute {
+            try {
+                val res = Json.parse(call("POST", "$API/users/@me/lists", Json.write(mapOf("title" to title)))) as? Map<*, *>
+                val id = res?.get("id") as? String ?: throw HttpError(500, "Google didn't return a list id")
+                main.post {
+                    store.dispatch(Action.ChooseGList(id, title, copyExisting))
+                    store.dispatch(Action.GTasksStatus("Created “$title” in Google Tasks."))
+                    syncNow(interactive = null)
+                }
+            } catch (e: HttpError) { status(explain(e.body)) } catch (e: Exception) { status("Couldn't create the list (${e.message ?: "network"}).") }
+        } }
+    }
+
+    /** Runs [block] once a token is available (silent re-authorization). */
+    private fun withToken(block: () -> Unit) {
+        if (token != null) { block(); return }
+        Identity.getAuthorizationClient(ctx).authorize(request)
+            .addOnSuccessListener { res -> if (!res.hasResolution()) { token = res.accessToken; block() } else status("Tap Connect Google Tasks to allow access.") }
+            .addOnFailureListener { status(explain(it.message)) }
     }
 
     /** Runs one sync round in the background. Silent re-authorization; never pops UI by itself. */
@@ -147,7 +183,9 @@ class GoogleTasksSync(private val ctx: Context, private val store: Store) {
         } finally { c.disconnect() }
     }
 
-    private val BASE = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
+    private val API = "https://tasks.googleapis.com/tasks/v1"
+    /** Tasks of the one list the user chose to sync. */
+    private val BASE get() = "$API/lists/${store.state.value.data.prefs.gListId}/tasks"
 
     private fun fetchAll(): List<GTasksPlan.GTask> {
         val out = ArrayList<GTasksPlan.GTask>()

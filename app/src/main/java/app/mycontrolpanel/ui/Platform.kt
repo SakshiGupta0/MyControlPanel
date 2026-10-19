@@ -26,6 +26,11 @@ interface Platform {
     fun share(text: String)
     fun connectGoogleTasks()
     fun syncGoogleTasksNow()
+    fun loadGLists()
+    fun createGList(title: String, copyExisting: Boolean)
 }
 
 val LocalPlatform = staticCompositionLocalOf<Platform> { error("Platform not provided") }
+
+/** Spotify connection (null in previews/tests that don't provide it). */
+val LocalSpotify = staticCompositionLocalOf<app.mycontrolpanel.data.SpotifyEngine?> { null }

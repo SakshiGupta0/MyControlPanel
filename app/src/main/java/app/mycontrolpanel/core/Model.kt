@@ -131,6 +131,11 @@ data class Prefs(
     val transitionWarnMin: Int = 10,
     val chimeOnTransition: Boolean = true,
     val calendarOn: Boolean = false,
+    /** What this device's dashboard shows (device-only; a phone and a wall panel differ). */
+    val features: Set<Feature> = Onboarding.preset(Profile.BALANCED),
+    /** The one Google Tasks list that syncs with the app. */
+    val gListId: String = "@default",
+    val gListTitle: String = "My Tasks",
 )
 
 /** Manual mode override. until = epoch millis, null = until the user returns to schedule. */
@@ -173,7 +178,7 @@ data class FocusSession(
 
 /** Everything that is persisted to disk. */
 data class AppData(
-    val schema: Int = 2,
+    val schema: Int = 3,
     val modes: List<Mode>,
     val routines: List<Routine>,
     val tasks: List<Task> = emptyList(),
@@ -197,6 +202,10 @@ data class AppData(
     val gDeletes: Set<String> = emptySet(),
     val gLastSync: Long = 0,
     val gTasksOn: Boolean = false,
+    /** Only app tasks created after this moment are copied into the Google list (0 = copy existing too). */
+    val gPushAfter: Long = 0,
+    /** First-run setup done on this device. */
+    val onboarded: Boolean = false,
 )
 
 // ---- live, not persisted ----
@@ -218,6 +227,7 @@ data class Live(
     val syncError: String? = null,
     val firebaseReady: Boolean = false,
     val gTasksStatus: String? = null,
+    val gLists: List<Pair<String, String>> = emptyList(),   // (id, title) of the user's Google Tasks lists
     val calendar: List<CalEvent> = emptyList(),
     val calendarStatus: CalendarStatus = CalendarStatus.OFF,
 )

@@ -20,6 +20,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +44,8 @@ import app.mycontrolpanel.core.Derive
 import app.mycontrolpanel.core.Dialog
 import app.mycontrolpanel.core.Effective
 import app.mycontrolpanel.core.Env
+import app.mycontrolpanel.core.Feature
+import androidx.compose.ui.unit.sp
 import app.mycontrolpanel.core.Focus
 import app.mycontrolpanel.core.Mode
 import app.mycontrolpanel.core.ModeWidget
@@ -85,78 +95,121 @@ fun resultLabel(r: ScheduleResult) = when (r) {
 @Composable
 fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
-    Row(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2)))
-            .padding(horizontal = 32.dp, vertical = 24.dp).testTag("dashboard"),
-        horizontalArrangement = Arrangement.spacedBy(28.dp),
-    ) {
+    val win = LocalWindow.current
+    val f = s.data.prefs.features
+    val bg = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("dashboard")
+
+    if (win.compact) {
+        // Phone / narrow / short screens: one scrolling column, actions pinned at the bottom (always reachable).
+        Column(bg) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                TimePanel(s, env, dispatch, Modifier.fillMaxWidth(), compact = true)
+                Banners(s, env, dispatch)
+                if (Feature.NOW in f) NowCard(s, env, dispatch)
+                RightColumnContent(s, env, dispatch, oneColumn = true)
+            }
+            ActionBar(s, dispatch, Modifier.fillMaxWidth().background(p.bg2).padding(horizontal = win.gutter, vertical = 10.dp))
+        }
+        return
+    }
+
+    Row(bg.padding(horizontal = 32.dp, vertical = 24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         // ---------------- left: where am I in the day + the one thing ----------------
         Column(Modifier.weight(0.44f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TimePanel(s, env, dispatch, Modifier.fillMaxWidth().weight(1f))
-            NowCard(s, env, dispatch)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PrimaryButton("＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
-                    tag = "captureButton", tall = 64.dp, style = Type.heading)
-                SecondaryButton("✦  Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) }, Modifier.heightIn(min = 64.dp), tag = "quickRoutinesButton")
-                RoundIconButton("⚙", { dispatch(Action.OpenSettings(SettingsSection.MODES)) }, size = 64.dp, tag = "settingsButton")
-            }
+            TimePanel(s, env, dispatch, Modifier.fillMaxWidth().weight(1f), compact = false)
+            if (Feature.NOW in f) NowCard(s, env, dispatch)
+            ActionBar(s, dispatch, Modifier.fillMaxWidth())
         }
-
         // ---------------- right: today, body basics, this mode ----------------
         Column(Modifier.weight(0.56f).fillMaxHeight().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Banners(s, env, dispatch)
-            TodayCard(s, env, dispatch)
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                WaterCard(s, dispatch, Modifier.weight(1f).fillMaxHeight())
-                MealsCard(s, dispatch, Modifier.weight(1f).fillMaxHeight())
-                DoneTodayCard(s, env, Modifier.weight(0.8f).fillMaxHeight())
-            }
-            val mode = Derive.effective(s, env).modeOrNull()
-            if (mode != null) {
-                mode.widgets.filter { it.enabled }.map { it.widget }.chunked(2).forEach { row ->
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        row.forEach { w -> ModeWidgetCard(w, mode, s, env, dispatch, Modifier.weight(1f).fillMaxHeight()) }
-                        if (row.size == 1) Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-            Overwhelmed(s, dispatch)
-            val sync = when (s.live.syncStatus) {
-                app.mycontrolpanel.core.SyncStatus.SYNCED -> " · synced ✓"
-                app.mycontrolpanel.core.SyncStatus.OFFLINE -> " · offline, will sync later"
-                app.mycontrolpanel.core.SyncStatus.ERROR -> " · sync problem (Settings → Account)"
-                app.mycontrolpanel.core.SyncStatus.CONNECTING -> " · connecting…"
-                app.mycontrolpanel.core.SyncStatus.LOCAL_ONLY -> ""
-            }
-            T("My Control Panel · v${LocalPlatform.current.versionName}$sync", Type.small, p.muted.copy(alpha = 0.6f), Modifier.testTag("footer"))
+            RightColumnContent(s, env, dispatch, oneColumn = false)
         }
     }
 }
 
+@Composable
+private fun ActionBar(s: AppState, dispatch: Dispatch, modifier: Modifier) {
+    val f = s.data.prefs.features
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (Feature.BRAIN_DUMP in f) PrimaryButton("＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
+            tag = "captureButton", tall = 60.dp, style = Type.heading)
+        else Spacer(Modifier.weight(1f))
+        if (Feature.QUICK_ROUTINES in f) SecondaryButton("✦ Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) },
+            Modifier.heightIn(min = 60.dp), tag = "quickRoutinesButton")
+        RoundIconButton("⚙", { dispatch(Action.OpenSettings(SettingsSection.WIDGETS)) }, size = 60.dp, tag = "settingsButton")
+    }
+}
+
+/** Today, body basics, this mode's widgets, overwhelmed shortcut, footer. */
+@Composable
+private fun RightColumnContent(s: AppState, env: Env, dispatch: Dispatch, oneColumn: Boolean) {
+    val p = P()
+    val f = s.data.prefs.features
+    if (Feature.TODAY in f) TodayCard(s, env, dispatch)
+    val small = listOfNotNull(Feature.WATER.takeIf { it in f }, Feature.MEALS.takeIf { it in f }, Feature.DONE_TALLY.takeIf { it in f })
+    if (small.isNotEmpty()) {
+        val narrow = LocalWindow.current.width < 420.dp
+        (if (narrow) small.chunked(1) else listOf(small)).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                row.forEach { feat ->
+                    val m = Modifier.weight(if (feat == Feature.DONE_TALLY) 0.8f else 1f).fillMaxHeight()
+                    when (feat) {
+                        Feature.WATER -> WaterCard(s, dispatch, m)
+                        Feature.MEALS -> MealsCard(s, dispatch, m)
+                        else -> DoneTodayCard(s, env, m)
+                    }
+                }
+            }
+        }
+    }
+    val mode = Derive.effective(s, env).modeOrNull()
+    if (mode != null && Feature.MODE_WIDGETS in f) {
+        val widgets = mode.widgets.filter { it.enabled }.map { it.widget }
+        (if (oneColumn && LocalWindow.current.width < 640.dp) widgets.chunked(1) else widgets.chunked(2)).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                row.forEach { w -> ModeWidgetCard(w, mode, s, env, dispatch, Modifier.weight(1f).fillMaxHeight()) }
+                if (row.size == 1 && widgets.size > 1 && !(oneColumn && LocalWindow.current.width < 640.dp)) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+    if (Feature.OVERWHELMED in f) Overwhelmed(s, dispatch)
+    val sync = when (s.live.syncStatus) {
+        app.mycontrolpanel.core.SyncStatus.SYNCED -> " · synced ✓"
+        app.mycontrolpanel.core.SyncStatus.OFFLINE -> " · offline, will sync later"
+        app.mycontrolpanel.core.SyncStatus.ERROR -> " · sync problem (Settings → Account)"
+        app.mycontrolpanel.core.SyncStatus.CONNECTING -> " · connecting…"
+        app.mycontrolpanel.core.SyncStatus.LOCAL_ONLY -> ""
+    }
+    T("My Control Panel · v${LocalPlatform.current.versionName}$sync", Type.small, p.muted.copy(alpha = 0.6f), Modifier.testTag("footer"))
+}
+
 /** The big tinted panel: mode, clock, date, next event, time left. */
 @Composable
-private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modifier) {
+private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modifier, compact: Boolean) {
     val p = P()
     val tint = LocalModeTint.current
     val eff = Derive.effective(s, env)
     val prefs = s.data.prefs
     val (time, ampm) = clockText(s.now, env, prefs.use24h)
+    val clockStyle = if (compact) Type.clock.copy(fontSize = 92.sp, lineHeight = 96.sp, letterSpacing = (-2).sp) else Type.clock
     Column(
-        modifier.clip(RoundedCornerShape(36.dp))
+        modifier.clip(RoundedCornerShape(if (compact) 28.dp else 36.dp))
             .background(Brush.linearGradient(listOf(tint, lerpColor(tint, p.bg, 0.55f))))
-            .padding(horizontal = 30.dp, vertical = 24.dp),
+            .padding(horizontal = if (compact) 22.dp else 30.dp, vertical = if (compact) 18.dp else 24.dp),
     ) {
         ModeHeader(eff, s, env, dispatch)
-        Spacer(Modifier.weight(1f))
+        if (compact) Spacer(Modifier.height(10.dp)) else Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.Bottom) {
-            T(time, Type.clock, modifier = Modifier.testTag("clock"))
-            if (ampm != null) T(ampm, Type.title, p.muted, Modifier.padding(start = 10.dp, bottom = 22.dp))
+            T(time, clockStyle, modifier = Modifier.testTag("clock"), maxLines = 1)
+            if (ampm != null) T(ampm, Type.title, p.muted, Modifier.padding(start = 8.dp, bottom = if (compact) 14.dp else 22.dp))
         }
-        T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), Type.title, p.text.copy(alpha = 0.75f))
-        NextEventLine(s, env)
-        Spacer(Modifier.weight(1f))
-        TimeLeftBar(s, env, eff)
+        T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), if (compact) Type.heading else Type.title, p.text.copy(alpha = 0.75f))
+        if (Feature.NEXT_EVENT in prefs.features) NextEventLine(s, env)
+        if (compact) Spacer(Modifier.height(14.dp)) else Spacer(Modifier.weight(1f))
+        if (Feature.TIME_LEFT in prefs.features) TimeLeftBar(s, env, eff)
     }
 }
 
@@ -263,13 +316,15 @@ private fun NowCard(s: AppState, env: Env, dispatch: Dispatch) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun NowBody(title: String, sub: String, actions: @Composable () -> Unit) {
     val p = P()
-    T(title, Type.display, maxLines = 2, modifier = Modifier.testTag("nowTitle"))
+    T(title, if (LocalWindow.current.compact) Type.title else Type.display, maxLines = 3, modifier = Modifier.testTag("nowTitle"))
     T(sub, Type.label, p.muted)
     Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) { actions() }
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
 }
 
 @Composable
@@ -504,19 +559,7 @@ private fun ModeWidgetCard(w: ModeWidget, mode: Mode, s: AppState, env: Env, dis
                     }
                 }
                 ModeWidget.CALENDAR -> CalendarWidget(s, env, mode, dispatch)
-                ModeWidget.MUSIC -> {
-                    Eyebrow("Music")
-                    T("Controls whatever is playing", Type.label, p.muted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RoundIconButton("⏮", { platform.media(MediaKey.PREVIOUS) }, size = 52.dp)
-                        RoundIconButton("⏯", { platform.media(MediaKey.PLAY_PAUSE) }, size = 60.dp, filled = true, tag = "playPause")
-                        RoundIconButton("⏭", { platform.media(MediaKey.NEXT) }, size = 52.dp)
-                    }
-                    val uri = s.data.prefs.sleepAudioUri.trim()
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (uri.isNotEmpty()) QuietButton("Sleep playlist", { if (!platform.openUri(uri)) dispatch(Action.ShowMessage("Couldn't open that link. Is Spotify installed?")) })
-                        QuietButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this tablet.")) })
-                    }
+                ModeWidget.MUSIC -> MusicWidget(s, mode, dispatch)
                 }
             }
         }
@@ -568,3 +611,97 @@ private fun EventRow(e: CalEvent, s: AppState, env: Env) {
 @Composable
 private fun Text1(text: String, color: Color) =
     androidx.compose.material3.Text(text, style = Type.label, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+/** Spotify, embedded: album art, what's playing, controls, and a picker. Falls back to plain media keys. */
+@Composable
+private fun MusicWidget(s: AppState, mode: Mode, dispatch: Dispatch) {
+    val p = P()
+    val platform = LocalPlatform.current
+    val engine = LocalSpotify.current
+    val sp = engine?.state?.collectAsState()?.value
+    val bedtime = mode.id == "bedtime"
+    Eyebrow(if (bedtime) "Sleep sounds" else "Music")
+    if (engine == null || sp == null || sp.status == app.mycontrolpanel.data.SpotifyEngine.Status.NOT_CONFIGURED) {
+        // No Spotify app registered in this build: basic controls for whatever is playing.
+        T("Controls whatever is playing", Type.label, p.muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RoundIconButton("⏮", { platform.media(MediaKey.PREVIOUS) }, size = 52.dp)
+            RoundIconButton("⏯", { platform.media(MediaKey.PLAY_PAUSE) }, size = 60.dp, filled = true, tag = "playPause")
+            RoundIconButton("⏭", { platform.media(MediaKey.NEXT) }, size = 52.dp)
+        }
+        QuietButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this device.")) })
+        return
+    }
+    val St = app.mycontrolpanel.data.SpotifyEngine.Status
+    when (sp.status) {
+        St.CONNECTED -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val art = sp.art
+                if (art != null) androidx.compose.foundation.Image(art.asImageBitmap(), contentDescription = "Album art",
+                    modifier = Modifier.size(84.dp).clip(RoundedCornerShape(14.dp)))
+                else Box(Modifier.size(84.dp).clip(RoundedCornerShape(14.dp)).background(p.cardStrong), contentAlignment = Alignment.Center) { T("♪", Type.title, p.muted) }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    T(sp.title.ifBlank { "Nothing playing" }, Type.heading, maxLines = 2, modifier = Modifier.testTag("spotifyTitle"))
+                    if (sp.artist.isNotBlank()) T(sp.artist, Type.small, p.muted, maxLines = 1)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                RoundIconButton("⏮", { engine.previous() }, size = 52.dp)
+                RoundIconButton(if (sp.paused) "▶" else "❚❚", { engine.playPause() }, size = 64.dp, filled = true, tag = "playPause")
+                RoundIconButton("⏭", { engine.next() }, size = 52.dp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                SecondaryButton(if (bedtime) "Sleep sounds…" else "Choose music…", { engine.browse(sleep = bedtime) }, tag = "spotifyBrowse")
+                val uri = s.data.prefs.sleepAudioUri.trim()
+                if (bedtime && uri.startsWith("spotify:")) QuietButton("My sleep playlist", { engine.play(uri) })
+            }
+        }
+        St.CONNECTING -> T("Connecting to Spotify…", Type.label, p.muted)
+        St.NOT_INSTALLED -> {
+            T("Install Spotify on this device to play music here.", Type.label, p.muted)
+            QuietButton("Get Spotify", { platform.openUri("market://details?id=com.spotify.music") })
+        }
+        else -> {
+            T(sp.message ?: "Connect your Spotify (Premium) to see what's playing and control it here.", Type.label, p.muted)
+            PrimaryButton("Connect Spotify", { engine.connect(interactive = true) }, tag = "spotifyConnect")
+        }
+    }
+    if (sp.items.isNotEmpty()) SpotifyBrowser(engine, sp)
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SpotifyBrowser(engine: app.mycontrolpanel.data.SpotifyEngine, sp: app.mycontrolpanel.data.SpotifyEngine.Ui) {
+    val p = P()
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { engine.closeBrowse() },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.widthIn(max = 900.dp).padding(20.dp).testTag("spotifyBrowser"),
+        containerColor = p.card,
+        title = { T(sp.browseTitle ?: "Music", Type.title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sp.items.forEach { item ->
+                    var thumb by remember(item.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
+                    LaunchedEffect(item.id) { engine.thumbnail(item) { thumb = it } }
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(14.dp)).clickable { engine.open(item) }.padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val b = thumb
+                        if (b != null) androidx.compose.foundation.Image(b.asImageBitmap(), null, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
+                        else Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(p.cardStrong))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            T(item.title ?: "", Type.label, maxLines = 1)
+                            if (!item.subtitle.isNullOrBlank()) T(item.subtitle, Type.small, p.muted, maxLines = 1)
+                        }
+                        T(if (item.playable) "▶" else "›", Type.heading, p.accent)
+                    }
+                }
+            }
+        },
+        confirmButton = { SecondaryButton("Close", { engine.closeBrowse() }) },
+    )
+}

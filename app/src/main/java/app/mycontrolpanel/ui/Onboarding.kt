@@ -1,0 +1,179 @@
+package app.mycontrolpanel.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import app.mycontrolpanel.core.Action
+import app.mycontrolpanel.core.AppState
+import app.mycontrolpanel.core.DeviceUse
+import app.mycontrolpanel.core.Need
+import app.mycontrolpanel.core.OnbStep
+import app.mycontrolpanel.core.Onboarding
+import app.mycontrolpanel.core.OnboardingAnswers
+import app.mycontrolpanel.core.Profile
+import app.mycontrolpanel.core.Screen
+import app.mycontrolpanel.core.fmtMinutes
+
+/** First-run setup: a few friendly questions that build the right dashboard. One question per screen. */
+@Composable
+fun OnboardingScreen(s: AppState, sc: Screen.Onboarding, dispatch: Dispatch) {
+    val p = P()
+    val win = LocalWindow.current
+    val a = sc.answers
+    fun set(n: OnboardingAnswers) = dispatch(Action.OnbUpdate(n))
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tintColor(1, p), p.bg2))).testTag("onboarding")) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = win.gutter, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(Modifier.widthIn(max = 760.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // progress
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    sc.steps.indices.forEach { i -> Dot(if (i <= sc.step) p.accent else p.line, if (i == sc.step) 14.dp else 10.dp) }
+                }
+                when (sc.current) {
+                    OnbStep.WELCOME -> Welcome(s, dispatch)
+                    OnbStep.DEVICE -> {
+                        Title("How will you use this device?", "You can set up your phone and a wall panel differently.")
+                        DeviceUse.values().forEach { u -> ChoiceCard(u.label, u.blurb, a.use == u, "use_${u.name}") { set(a.copy(use = u)) } }
+                    }
+                    OnbStep.AMOUNT -> {
+                        Title("How much do you want on screen?", "Less is calmer. You can switch any time in Settings → Dashboard.")
+                        Profile.values().forEach { pr -> ChoiceCard(pr.label, pr.blurb, a.profile == pr, "profile_${pr.name}") { set(a.copy(profile = pr)) } }
+                    }
+                    OnbStep.NEEDS -> NeedsStep(a, ::set)
+                    OnbStep.DAY -> DayStep(s, a, ::set)
+                    OnbStep.READY -> Ready(sc)
+                }
+            }
+        }
+        // footer — always visible
+        Row(
+            Modifier.fillMaxWidth().background(p.bg2).padding(horizontal = win.gutter, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (sc.step > 0) SecondaryButton("‹ Back", { dispatch(Action.OnbBack) }, tag = "onbBack")
+            else QuietButton("Skip setup", { dispatch(Action.OnbSkip) }, color = p.muted, tag = "onbSkip")
+            Spacer(Modifier.weight(1f))
+            PrimaryButton(
+                when (sc.current) { OnbStep.WELCOME -> if (s.live.account == null) "Continue without account" else "Next"; OnbStep.READY -> "Finish ✓"; else -> "Next" },
+                { dispatch(Action.OnbNext) }, tag = "onbNext", tall = 60.dp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Title(title: String, sub: String) {
+    T(title, if (LocalWindow.current.compact) Type.title else Type.display)
+    T(sub, Type.body, P().muted)
+}
+
+@Composable
+private fun Welcome(s: AppState, dispatch: Dispatch) {
+    val p = P()
+    val platform = LocalPlatform.current
+    Spacer(Modifier.height(12.dp))
+    T("Hi! Let's set up your panel.", if (LocalWindow.current.compact) Type.title else Type.display)
+    T("A calm place that shows what time of day it is, what to do next, and helps you through routines — one thing at a time.", Type.body, p.muted)
+    Spacer(Modifier.height(8.dp))
+    val acct = s.live.account
+    if (acct != null) {
+        PanelCard(Modifier.fillMaxWidth(), tint = p.accentSoft) { T("✓  Signed in as ${acct.name}. Your setup syncs across devices.", Type.label) }
+    } else if (s.live.firebaseReady) {
+        PanelCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                T("Sign in to sync your phone and tablet, and to share lists with people.", Type.body)
+                PrimaryButton("Sign in with Google", { platform.signIn() }, Modifier.fillMaxWidth(), tag = "onbSignIn", tall = 60.dp, style = Type.heading)
+                T("Already use the panel on another device? Sign in with the same account and your setup comes with you.", Type.small, p.muted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChoiceCard(title: String, blurb: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+    val p = P()
+    PanelCard(Modifier.fillMaxWidth().clip(CardShape).clickable(onClick = onClick).testTag(tag), tint = if (selected) p.accentSoft else null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) { T(title, Type.heading); T(blurb, Type.label, p.muted) }
+            Box(Modifier.padding(start = 12.dp)) { CheckCircle(selected, onClick, size = 36.dp) }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NeedsStep(a: OnboardingAnswers, set: (OnboardingAnswers) -> Unit) {
+    Title("What would help most?", "Pick any that fit. The dashboard adds just those things.")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Need.values().forEach { n ->
+            val on = n in a.needs
+            Chip("${n.icon}  ${n.label}", on, { set(a.copy(needs = if (on) a.needs - n else a.needs + n)) }, tag = "need_${n.name}")
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DayStep(s: AppState, a: OnboardingAnswers, set: (OnboardingAnswers) -> Unit) {
+    val use24 = s.data.prefs.use24h
+    Title("What does your day look like?", "Roughly is fine — this sets when Morning, Work, Evening and Bedtime switch on.")
+    ToggleRow("I work on weekdays", a.worksWeekdays, { set(a.copy(worksWeekdays = it)) },
+        sub = if (a.worksWeekdays) "Work on weekdays, Day Off at weekends" else "No fixed work days — every day uses the Day Off shape", tag = "worksWeekdays")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TimeField("I wake up", a.wake, use24, { set(a.copy(wake = it)) }, tag = "wakeTime")
+        TimeField(if (a.worksWeekdays) "Work starts" else "My day starts", a.workStart, use24, { set(a.copy(workStart = it)) })
+        TimeField(if (a.worksWeekdays) "Work ends" else "My day ends", a.workEnd, use24, { set(a.copy(workEnd = it)) })
+        TimeField("Bedtime", a.sleep, use24, { set(a.copy(sleep = it)) }, tag = "bedTime")
+    }
+    if (!Onboarding.validDay(a)) T("These need to be in order: wake-up → start → finish → bedtime.", Type.label, P().warn)
+}
+
+@Composable
+private fun Ready(sc: Screen.Onboarding) {
+    val p = P()
+    val a = sc.answers
+    val features = if (sc.returning) Onboarding.preset(a.profile) else Onboarding.featuresFor(a)
+    T("You're all set", if (LocalWindow.current.compact) Type.title else Type.display)
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            T("This device will show", Type.heading)
+            features.sortedBy { it.ordinal }.forEach { T("•  ${it.label}", Type.label, p.muted) }
+            if (a.use == DeviceUse.PANEL) T("Stays on, full screen, dims at night.", Type.small, p.muted)
+        }
+    }
+    if (!sc.returning) PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            T("Your day", Type.heading)
+            T("☀️ Morning ${fmtMinutes(a.wake, false)} – ${fmtMinutes(a.workStart, false)}", Type.label, p.muted)
+            T((if (a.worksWeekdays) "💼 Work (weekdays) " else "🌿 Day ") + "${fmtMinutes(a.workStart, false)} – ${fmtMinutes(a.workEnd, false)}", Type.label, p.muted)
+            T("🌇 Evening ${fmtMinutes(a.workEnd, false)} – ${fmtMinutes(a.sleep, false)}", Type.label, p.muted)
+            T("🌙 Bedtime from ${fmtMinutes(a.sleep, false)}", Type.label, p.muted)
+        }
+    }
+    T("Everything can be changed later in Settings.", Type.small, p.muted)
+}
+

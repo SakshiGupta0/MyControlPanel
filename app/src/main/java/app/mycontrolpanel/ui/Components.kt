@@ -144,9 +144,10 @@ fun BreathingGuide(modifier: Modifier = Modifier) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun TintSwatches(selected: Int, onPick: (Int) -> Unit) {
     val p = P()
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         TINTS.indices.forEach { i ->
             Box(
                 Modifier.size(52.dp).clip(PillShape).background(tintColor(i, p))
@@ -396,3 +397,13 @@ fun ConfirmDialog(
 
 @Composable
 fun Dot(color: Color, size: Dp = 10.dp) = Box(Modifier.size(size).clip(PillShape).background(color))
+
+/** Two things side by side on wide screens, stacked on phones. */
+@Composable
+fun AdaptivePair(first: @Composable (Modifier) -> Unit, second: @Composable (Modifier) -> Unit) {
+    if (LocalWindow.current.compact) Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        first(Modifier.fillMaxWidth()); second(Modifier.fillMaxWidth())
+    } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        first(Modifier.weight(1f)); second(Modifier.weight(1f))
+    }
+}

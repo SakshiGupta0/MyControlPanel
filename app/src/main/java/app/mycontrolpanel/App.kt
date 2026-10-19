@@ -14,6 +14,8 @@ class App : Application() {
         private set
     lateinit var gtasks: GoogleTasksSync
         private set
+    lateinit var spotify: app.mycontrolpanel.data.SpotifyEngine
+        private set
 
     /** True while the dashboard is on screen; reminders then show as a card instead of a notification. */
     @Volatile var inForeground = false
@@ -25,6 +27,7 @@ class App : Application() {
         store = Store(Repository(filesDir), onRoutinesChanged = { Alarms.scheduleNext(this, it) })
         sync = SyncEngine(this, store).also { it.start() }
         gtasks = GoogleTasksSync(this, store).also { it.start() }
+        spotify = app.mycontrolpanel.data.SpotifyEngine(this)
     }
 
     companion object {

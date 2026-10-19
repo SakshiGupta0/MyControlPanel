@@ -1,6 +1,7 @@
 package app.mycontrolpanel.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +52,7 @@ import kotlinx.coroutines.delay
 
 // ============================ Tasks screen ============================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
     val p = P()
@@ -58,27 +60,8 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
         s.data.modes.sortedBy { it.order }.map { it.id to "${it.icon}  ${it.name}" } +
         s.live.spaces.map { "space:${it.id}" to "🏠  ${it.name}" } + listOf(TaskFilter.DONE to "✓  Done")
     val list = Derive.tasksFor(s, filter, env)
-    Row(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
-        Column(Modifier.width(260.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, Modifier.fillMaxWidth(), tag = "closeTasks")
-            Spacer(Modifier.height(14.dp))
-            filters.forEach { (id, label) ->
-                val sel = id == filter
-                val count = if (id == TaskFilter.DONE) null else Derive.tasksFor(s, id, env).count { !it.done }
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp))
-                        .background(if (sel) p.card else androidx.compose.ui.graphics.Color.Transparent)
-                        .clickable { dispatch(Action.OpenTasks(id)) }.padding(horizontal = 14.dp).testTag("filter_$id"),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    T(label, if (sel) Type.heading else Type.label, if (sel) p.text else p.muted, Modifier.weight(1f))
-                    if (count != null && count > 0) T("$count", Type.small, p.muted)
-                }
-            }
-        }
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 40.dp, vertical = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    val win = LocalWindow.current
+    val body: @Composable () -> Unit = {
             QuickAdd(filter, dispatch)
             when (filter) {
                 TaskFilter.TODAY -> T("Up to ${s.data.prefs.todayLimit} things. Star a task (☆) to put it here.", Type.label, p.muted)
@@ -99,12 +82,47 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
                     list.forEach { t -> TaskRow(t, s, dispatch) }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (filter == TaskFilter.TODAY && Derive.todayTasks(s).isNotEmpty()) SecondaryButton("Fresh start (clear today)", { dispatch(Action.FreshStart) })
                 if (filter == TaskFilter.DONE && list.isNotEmpty()) SecondaryButton("Clear finished", { dispatch(Action.ClearDone) })
                 SecondaryButton("Pick one for me", { dispatch(Action.PickOne) })
             }
+    }
+    if (win.compact) {
+        Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
+            Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeTasks")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    filters.forEach { (id, label) -> Chip(label, id == filter, { dispatch(Action.OpenTasks(id)) }, tag = "filter_$id") }
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) { body() }
         }
+        return
+    }
+    Row(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
+        Column(Modifier.width(260.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, Modifier.fillMaxWidth(), tag = "closeTasks")
+            Spacer(Modifier.height(14.dp))
+            filters.forEach { (id, label) ->
+                val sel = id == filter
+                val count = if (id == TaskFilter.DONE) null else Derive.tasksFor(s, id, env).count { !it.done }
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (sel) p.card else androidx.compose.ui.graphics.Color.Transparent)
+                        .clickable { dispatch(Action.OpenTasks(id)) }.padding(horizontal = 14.dp).testTag("filter_$id"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    T(label, if (sel) Type.heading else Type.label, if (sel) p.text else p.muted, Modifier.weight(1f))
+                    if (count != null && count > 0) T("$count", Type.small, p.muted)
+                }
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 40.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) { body() }
     }
 }
 
@@ -205,6 +223,7 @@ fun TaskEditorDialog(s: AppState, task: Task, isNew: Boolean, dispatch: Dispatch
 // ============================ Focus ============================
 
 /** Visual focus timer: a ring that empties, one label, three calm controls. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FocusScreen(s: AppState, dispatch: Dispatch) {
     val p = P()
@@ -212,37 +231,42 @@ fun FocusScreen(s: AppState, dispatch: Dispatch) {
     if (f == null) { LaunchedEffect(Unit) { dispatch(Action.GoDashboard) }; return }
     val remaining = Focus.remaining(f, s.now)
     val tint = LocalModeTint.current
-    Row(
+    val win = LocalWindow.current
+    val ring = if (win.compact) 260.dp else 420.dp
+    FlowRow(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(lerpColor(tint, p.bg, 0.5f), p.bg2)))
-            .padding(horizontal = 56.dp, vertical = 36.dp).testTag("focusScreen"),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(56.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = if (win.compact) win.gutter else 56.dp, vertical = if (win.compact) 20.dp else 36.dp).testTag("focusScreen"),
+        horizontalArrangement = Arrangement.spacedBy(56.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        maxItemsInEachRow = if (win.compact) 1 else 2,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.weight(1f).align(Alignment.CenterVertically), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Eyebrow(if (f.finished) "Time's up" else "Focusing on", p.accent)
             T(f.label, Type.display.copy(fontSize = 52.sp, lineHeight = 60.sp), maxLines = 3)
             T(if (f.finished) "Nice work staying with it. Did you finish?" else "Just this. Everything else can wait.", Type.body, p.muted)
             Spacer(Modifier.height(16.dp))
             if (f.finished) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (f.taskId != null) PrimaryButton("Yes, it's done ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDone", tall = 64.dp, style = Type.heading)
                     SecondaryButton(if (f.taskId != null) "Not yet" else "Back to dashboard", { dispatch(Action.EndFocus(false)) }, tag = "focusNotYet")
                     SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (f.runningSince != null) SecondaryButton("Pause", { dispatch(Action.FocusPause) }, tag = "focusPause")
                     else PrimaryButton("Resume", { dispatch(Action.FocusResume) }, tag = "focusResume")
                     SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
                     if (f.taskId != null) PrimaryButton("Done early ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDoneEarly")
                 }
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     QuietButton("‹  Peek at dashboard", { dispatch(Action.GoDashboard) }, color = p.muted)
                     HoldToExitButton({ dispatch(Action.EndFocus(false)) }, tag = "holdStopFocus", label = "Hold to stop")
                 }
             }
         }
-        Box(Modifier.size(420.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(ring).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
             ProgressRing(Focus.fraction(f, s.now), Modifier.fillMaxSize(), stroke = 22.dp,
                 color = if (f.finished) p.warm else p.accent, track = p.card.copy(alpha = 0.8f))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -9,7 +9,7 @@ import java.time.ZoneId
 // ---------------------------------------------------------------------------
 
 enum class SettingsSection(val label: String) {
-    MODES("Modes"), ROUTINES("Routines"), TASKS("Tasks & focus"), WIDGETS("Dashboard"), CALENDAR("Calendar"),
+    WIDGETS("Dashboard"), MODES("Modes"), ROUTINES("Routines"), TASKS("Tasks & focus"), CALENDAR("Calendar"),
     MUSIC("Music"), APPEARANCE("Appearance"), DEVICE("Device"), ACCOUNT("Account & sharing"), RESET("Reset"), ABOUT("About"),
 }
 
@@ -30,6 +30,11 @@ sealed interface Screen {
     data class RoutineEditor(val draft: Routine, val initial: Routine, val isNew: Boolean) : Screen
     data class Tasks(val filter: String = TaskFilter.TODAY) : Screen
     object Focus : Screen
+    /** First-run setup. [returning] = the account already had a setup, so only device questions are asked. */
+    data class Onboarding(val step: Int = 0, val answers: OnboardingAnswers = OnboardingAnswers(), val returning: Boolean = false) : Screen {
+        val steps get() = app.mycontrolpanel.core.Onboarding.steps(returning)
+        val current get() = steps[step.coerceIn(0, steps.size - 1)]
+    }
 }
 
 sealed interface Dialog {
@@ -156,6 +161,16 @@ sealed interface Action {
     data class SetGoogleTasks(val on: Boolean) : Action
     data class GTasksStatus(val text: String?) : Action
     data class ApplyGTasks(val result: GTasksPlan.Result, val at: Long, val created: Map<String, String> = emptyMap()) : Action
+    data class GListsLoaded(val lists: List<Pair<String, String>>) : Action
+    data class ChooseGList(val id: String, val title: String, val copyExisting: Boolean) : Action
+    // onboarding & dashboard features
+    object StartOnboarding : Action
+    data class OnbUpdate(val answers: OnboardingAnswers) : Action
+    object OnbNext : Action
+    object OnbBack : Action
+    object OnbFinish : Action
+    object OnbSkip : Action
+    data class SetFeatures(val features: Set<Feature>) : Action
 }
 
 object Reducer {
@@ -164,6 +179,7 @@ object Reducer {
         val screen = when {
             data.run != null && data.routines.any { it.id == data.run.routineId } -> Screen.RunningRoutine
             data.focus != null -> Screen.Focus
+            !data.onboarded -> Screen.Onboarding()
             else -> Screen.Dashboard
         }
         val cleaned = if (screen != Screen.RunningRoutine) data.copy(run = null) else data
@@ -381,7 +397,7 @@ object Reducer {
             is Action.UpdatePrefs -> data(d.copy(prefs = a.prefs))
             Action.ConfirmReset -> {
                 // Destructive: replace everything, recalc mode, single state emission → dashboard rebuilt exactly once.
-                val fresh = Defaults.data()
+                val fresh = Defaults.data().copy(onboarded = true, prefs = Defaults.data().prefs.copy(features = d.prefs.features))
                 tick(AppState(fresh, Ui(screen = Screen.Dashboard, message = "Everything is back to the defaults."), now, s.live), env)
             }
 
@@ -488,7 +504,17 @@ object Reducer {
             is Action.ApplyRemote -> {
                 // An empty account (first sign-in anywhere) adopts this device's data; otherwise merge, newest wins.
                 val merged = if (a.accountWasEmpty) Sync.stampAll(d, now) else Sync.applyRemote(d, a.docs)
-                tick(s.copy(data = merged), env)
+                // Signing in on the welcome screen moves setup along: an existing account only needs device questions.
+                val sc = ui.screen
+                val existing = !a.accountWasEmpty && a.docs.isNotEmpty()
+                val nui = when {
+                    sc !is Screen.Onboarding || s.live.account == null -> ui
+                    // An account that already has a setup: never let setup questions overwrite it, whatever step we're on.
+                    existing && !sc.returning -> ui.copy(screen = Screen.Onboarding(sc.step.coerceIn(1, 3), sc.answers, returning = true))
+                    sc.current == OnbStep.WELCOME -> ui.copy(screen = Screen.Onboarding(1, sc.answers, returning = existing))
+                    else -> ui
+                }
+                tick(s.copy(data = merged, ui = nui), env)
             }
             is Action.MarkSent -> data(Sync.markSent(d, a.docs))
             is Action.SpacesChanged -> Reduced(s.copy(
@@ -506,6 +532,52 @@ object Reducer {
             is Action.SetGoogleTasks -> data(d.copy(gTasksOn = a.on, gLastSync = if (a.on) d.gLastSync else 0))
             is Action.GTasksStatus -> Reduced(s.copy(live = s.live.copy(gTasksStatus = a.text)))
             is Action.ApplyGTasks -> data(GTasksPlan.applyLocal(d, a.result, a.at, a.created))
+            is Action.GListsLoaded -> Reduced(s.copy(live = s.live.copy(gLists = a.lists)))
+            is Action.ChooseGList -> data(d.copy(
+                // Google ids belong to a list, so switching lists unlinks everything and starts a fresh match.
+                prefs = d.prefs.copy(gListId = a.id, gListTitle = a.title),
+                tasks = d.tasks.map { if (it.googleId != null) it.copy(googleId = null) else it },
+                gTasksOn = true, gLastSync = 0, gDeletes = emptySet(),
+                gPushAfter = if (a.copyExisting) 0 else now,
+            ))
+
+            // ---------------- onboarding & features ----------------
+            Action.StartOnboarding -> {
+                val p = d.prefs
+                val answers = OnboardingAnswers(
+                    use = if (p.fullscreen || p.keepScreenOn) DeviceUse.PANEL else DeviceUse.PHONE,
+                    profile = Onboarding.profileOf(p.features) ?: Profile.BALANCED,
+                    worksWeekdays = d.modes.find { it.id == "work" }?.scheduled ?: true,
+                    wake = d.modes.find { it.id == "morning" }?.start ?: 7 * 60,
+                    workStart = d.modes.find { it.id == "work" }?.start ?: 10 * 60,
+                    workEnd = d.modes.find { it.id == "work" }?.end ?: (18 * 60 + 30),
+                    sleep = d.modes.find { it.id == "bedtime" }?.start ?: 23 * 60,
+                )
+                ui(ui.copy(screen = Screen.Onboarding(1, answers, returning = false), dialog = null))
+            }
+            is Action.OnbUpdate -> {
+                val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
+                ui(ui.copy(screen = sc.copy(answers = a.answers)))
+            }
+            Action.OnbNext -> {
+                val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
+                if (sc.current == OnbStep.DAY && !Onboarding.validDay(sc.answers))
+                    return msg("Those times overlap — wake-up, start, finish and bedtime need to be in that order.")
+                if (sc.step >= sc.steps.size - 1) return reduceInner(s, Action.OnbFinish, now, env)
+                ui(ui.copy(screen = sc.copy(step = sc.step + 1)))
+            }
+            Action.OnbBack -> {
+                val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
+                ui(ui.copy(screen = sc.copy(step = (sc.step - 1).coerceAtLeast(0))))
+            }
+            Action.OnbFinish -> {
+                val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
+                val nd = Onboarding.apply(d, sc.answers, sc.returning)
+                tick(s.copy(data = nd, ui = ui.copy(screen = Screen.Dashboard, dialog = null,
+                    message = "All set. Change anything later in Settings → Dashboard.")), env)
+            }
+            Action.OnbSkip -> tick(s.copy(data = d.copy(onboarded = true), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
+            is Action.SetFeatures -> data(d.copy(prefs = d.prefs.copy(features = a.features)))
 
             // ---------------- persistence feedback ----------------
             is Action.SaveFailed -> ui(ui.copy(saveError = a.message))
@@ -538,6 +610,7 @@ object Reducer {
             }
             is Screen.Settings, is Screen.Tasks -> Reduced(s.copy(ui = ui.copy(screen = Screen.Dashboard)))
             Screen.Focus -> Reduced(s.copy(ui = ui.copy(screen = Screen.Dashboard))) // timer keeps running; Now card brings you back
+            is Screen.Onboarding -> reduceInner(s, Action.OnbBack, s.now, env)
             is Screen.ModeEditor, is Screen.RoutineEditor -> reduce(s, Action.CancelEdit, s.now, env)
         }
     }
@@ -569,7 +642,7 @@ object Reducer {
         val dow = local.dayOfWeek.value
         val newlyPrompted = d.routines.filter { r ->
             val sc = r.schedule
-            r.enabled && sc != null && sc.notify != NotifyStyle.NONE && dow in sc.days &&
+            Feature.ROUTINE_PROMPTS in d.prefs.features && r.enabled && sc != null && sc.notify != NotifyStyle.NONE && dow in sc.days &&
                 minute >= sc.time && minute < sc.time + PROMPT_WINDOW_MIN && r.id !in d.daily.prompted
         }.map { it.id }
         if (newlyPrompted.isNotEmpty()) d = d.copy(daily = d.daily.copy(prompted = d.daily.prompted + newlyPrompted))
@@ -583,7 +656,7 @@ object Reducer {
 
         // gentle heads-up before the mode changes (time blindness)
         val warn = d.prefs.transitionWarnMin
-        if (warn > 0 && d.override == null) {
+        if (warn > 0 && d.override == null && Feature.HEADS_UP in d.prefs.features) {
             val nc = Scheduler.nextChange(d.modes, local)
             if (nc != null) {
                 val at = Scheduler.toEpoch(nc.first, env.zone)
@@ -680,7 +753,7 @@ object Derive {
     /** Minutes until the next mode change, if it's within the heads-up window. */
     fun transitionSoon(s: AppState, env: Env): Pair<Long, ScheduleResult>? {
         val warn = s.data.prefs.transitionWarnMin
-        if (warn <= 0 || s.data.override != null) return null
+        if (warn <= 0 || s.data.override != null || Feature.HEADS_UP !in s.data.prefs.features) return null
         val (t, r) = nextChange(s, env) ?: return null
         val mins = (Scheduler.toEpoch(t, env.zone) - s.now + 59_999) / 60_000
         return if (mins <= warn) mins to r else null

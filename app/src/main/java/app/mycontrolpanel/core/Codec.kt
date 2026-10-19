@@ -21,6 +21,7 @@ object Codec {
         "modeEnteredAt" to d.modeEnteredAt,
         "meta" to d.meta, "tombs" to d.tombs, "synced" to d.synced, "tombSpaces" to d.tombSpaces,
         "gDeletes" to d.gDeletes.toList(), "gLastSync" to d.gLastSync, "gTasksOn" to d.gTasksOn,
+        "gPushAfter" to d.gPushAfter, "onboarded" to d.onboarded,
     ))
 
     fun decode(text: String): AppData {
@@ -29,7 +30,7 @@ object Codec {
         val modes = (root["modes"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::modeIn) } ?: defaults.modes
         val routines = (root["routines"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::routineIn) } ?: defaults.routines
         return AppData(
-            schema = 2,
+            schema = 3,
             modes = modes,
             routines = routines,
             tasks = (root["tasks"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::taskIn) } ?: emptyList(),
@@ -45,6 +46,9 @@ object Codec {
             meta = root.longMap("meta"), tombs = root.longMap("tombs"), synced = root.longMap("synced"),
             tombSpaces = (root["tombSpaces"] as? Map<*, *>)?.entries?.mapNotNull { (k, v) -> (k as? String)?.let { kk -> (v as? String)?.let { kk to it } } }?.toMap() ?: emptyMap(),
             gDeletes = root.strSet("gDeletes"), gLastSync = root.long("gLastSync") ?: 0, gTasksOn = root.bool("gTasksOn", false),
+            gPushAfter = root.long("gPushAfter") ?: 0,
+            // Installs from before onboarding existed are already set up — don't send them through it again.
+            onboarded = root.bool("onboarded", (root["schema"] as? Number)?.toInt()?.let { it < 3 } ?: false),
         )
     }
 
@@ -159,6 +163,7 @@ object Codec {
         "nightDim" to p.nightDim, "dimModeIds" to p.dimModeIds.toList(), "sleepAudioUri" to p.sleepAudioUri,
         "todayLimit" to p.todayLimit, "focusMin" to p.focusMin, "transitionWarnMin" to p.transitionWarnMin,
         "chimeOnTransition" to p.chimeOnTransition, "calendarOn" to p.calendarOn,
+        "features" to p.features.map { it.name }.sorted(), "gListId" to p.gListId, "gListTitle" to p.gListTitle,
     )
 
     fun prefsIn(m: Map<*, *>): Prefs {
@@ -182,6 +187,9 @@ object Codec {
             transitionWarnMin = m.int("transitionWarnMin", d.transitionWarnMin).coerceIn(0, 60),
             chimeOnTransition = m.bool("chimeOnTransition", d.chimeOnTransition),
             calendarOn = m.bool("calendarOn", d.calendarOn),
+            features = (m["features"] as? List<*>)?.mapNotNull { n -> Feature.values().find { it.name == n } }?.toSet() ?: d.features,
+            gListId = m.str("gListId") ?: d.gListId,
+            gListTitle = m.str("gListTitle") ?: d.gListTitle,
         )
     }
 

@@ -32,6 +32,7 @@ import app.mycontrolpanel.system.MediaKeys
 import app.mycontrolpanel.ui.MediaKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.tasks.await
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
@@ -124,6 +125,8 @@ class MainActivity : ComponentActivity() {
         }
         override fun connectGoogleTasks() = app.gtasks.connect(gtasksConsent)
         override fun syncGoogleTasksNow() = app.gtasks.syncNow(gtasksConsent)
+        override fun loadGLists() = app.gtasks.loadLists()
+        override fun createGList(title: String, copyExisting: Boolean) = app.gtasks.createList(title, copyExisting)
     }
 
     private val gtasksConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
@@ -211,7 +214,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(prefs.calendarOn) { reloadCalendar() }
             val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
-            CompositionLocalProvider(LocalPlatform provides platform) {
+            CompositionLocalProvider(LocalPlatform provides platform, app.mycontrolpanel.ui.LocalSpotify provides app.spotify) {
                 PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
                     AppRoot(s, env, store::dispatch)
                 }
@@ -248,6 +251,11 @@ class MainActivity : ComponentActivity() {
                     try {
                         while (true) { reloadCalendar(); delay(5 * 60_000L) }
                     } finally { runCatching { contentResolver.unregisterContentObserver(calendarObserver) } }
+                }
+                // Spotify: reconnect quietly while visible if it was connected before; let go when hidden.
+                launch {
+                    if (app.spotify.configured && app.spotify.linked) app.spotify.connect(interactive = false)
+                    try { awaitCancellation() } finally { app.spotify.disconnect() }
                 }
                 // Google Tasks: every 10 minutes while the panel is visible (and right away on wake).
                 launch {

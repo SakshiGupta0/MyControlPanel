@@ -56,8 +56,12 @@ jobs:
           path: app/build/reports/tests/
 
   ui-tests:
-    name: Emulator smoke tests (tablet, landscape)
+    name: Emulator smoke tests (${{ matrix.device }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [pixel_c, pixel_6]   # tablet + phone
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
@@ -79,7 +83,7 @@ jobs:
           api-level: 31
           target: default
           arch: x86_64
-          profile: pixel_c
+          profile: ${{ matrix.device }}
           ram-size: 3072M
           disk-size: 4096M
           emulator-boot-timeout: 900
@@ -93,7 +97,7 @@ jobs:
           api-level: 31
           target: default
           arch: x86_64
-          profile: pixel_c
+          profile: ${{ matrix.device }}
           ram-size: 3072M
           disk-size: 4096M
           emulator-boot-timeout: 900
@@ -114,7 +118,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: emulator-test-report
+          name: emulator-test-report-${{ matrix.device }}
           path: app/build/reports/androidTests/
 
   release:
