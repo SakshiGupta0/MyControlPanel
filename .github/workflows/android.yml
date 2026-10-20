@@ -139,6 +139,14 @@ jobs:
           name: screenshots-${{ matrix.device }}
           path: shots/
           if-no-files-found: ignore
+      - name: Push screenshots to a review branch (preview runs only)
+        if: always() && github.ref != 'refs/heads/main'
+        run: |
+          [ -d shots ] || exit 0
+          cd shots
+          git init -q && git checkout -q -b shots-${{ matrix.device }}
+          git add . && git -c user.name=ci -c user.email=ci@example.com commit -qm "screenshots"
+          git push -f -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" shots-${{ matrix.device }}
 
   release:
     name: Publish APK

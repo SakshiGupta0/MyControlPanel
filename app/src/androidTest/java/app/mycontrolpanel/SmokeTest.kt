@@ -276,7 +276,7 @@ class SmokeTest {
         rule.waitForIdle()
         rule.onNodeWithTag("breatherBubble").assertIsDisplayed().performClick()
         rule.onNodeWithTag("breather").assertIsDisplayed()
-        rule.onNodeWithTag("breathCue").assertExists()
+        rule.onNodeWithTag("breathCue", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("breatherClose").tap()
         rule.onNodeWithTag("breather").assertDoesNotExist()
         rule.onNodeWithTag("dashboard").assertIsDisplayed()
