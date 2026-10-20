@@ -54,6 +54,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.mycontrolpanel.core.Action
 import app.mycontrolpanel.core.Derive
 import app.mycontrolpanel.core.Effect
+import app.mycontrolpanel.core.Ambient
+import app.mycontrolpanel.core.MusicProvider
+import app.mycontrolpanel.system.SoundService
+import app.mycontrolpanel.ui.LocalCelebrate
 import app.mycontrolpanel.system.Alarms
 import app.mycontrolpanel.ui.AppRoot
 import app.mycontrolpanel.ui.ContrastPalette
@@ -150,9 +154,9 @@ class MainActivity : ComponentActivity() {
             return runCatching { startActivity(base); true }.getOrDefault(false)
         }
         override fun pickAudioFile() { runCatching { audioPicker.launch(arrayOf("audio/*")) } }
-        override fun playAmbient(a: app.mycontrolpanel.core.Ambient, timerMin: Int) = app.mycontrolpanel.system.SoundService.playAmbient(this@MainActivity, a, timerMin)
-        override fun playFile(uri: String, name: String, timerMin: Int) = app.mycontrolpanel.system.SoundService.playFile(this@MainActivity, uri, name, timerMin)
-        override fun stopSound() = app.mycontrolpanel.system.SoundService.stop(this@MainActivity)
+        override fun playAmbient(a: Ambient, timerMin: Int) = SoundService.playAmbient(this@MainActivity, a, timerMin)
+        override fun playFile(uri: String, name: String, timerMin: Int) = SoundService.playFile(this@MainActivity, uri, name, timerMin)
+        override fun stopSound() = SoundService.stop(this@MainActivity)
         override fun createGList(title: String, copyExisting: Boolean) = app.gtasks.createList(title, copyExisting)
     }
 
@@ -164,7 +168,7 @@ class MainActivity : ComponentActivity() {
             contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         }.getOrNull() ?: "Your sound"
         val m = store.state.value.data.prefs.music
-        store.dispatch(Action.SetMusic(m.copy(provider = app.mycontrolpanel.core.MusicProvider.DEVICE_FILE, fileUri = uri.toString(), fileName = name.substringBeforeLast('.'))))
+        store.dispatch(Action.SetMusic(m.copy(provider = MusicProvider.DEVICE_FILE, fileUri = uri.toString(), fileName = name.substringBeforeLast('.'))))
     }
 
     private val gtasksConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
@@ -254,7 +258,7 @@ class MainActivity : ComponentActivity() {
             val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
             CompositionLocalProvider(LocalPlatform provides platform, LocalSpotify provides app.spotify) {
                 PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
-                    CompositionLocalProvider(app.mycontrolpanel.ui.LocalCelebrate provides celebrate) {
+                    CompositionLocalProvider(LocalCelebrate provides celebrate) {
                         AppRoot(s, env, store::dispatch)
                     }
                 }
