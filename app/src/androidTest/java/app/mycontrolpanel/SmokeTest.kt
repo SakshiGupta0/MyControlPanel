@@ -246,6 +246,8 @@ class SmokeTest {
         rule.waitForIdle()
         rule.onNodeWithTag("onboarding").assertExists()
         rule.onNodeWithTag("onbNickname").typeIn("Riya")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        rule.waitForIdle()
         rule.onNodeWithTag("onbNext").tap()   // hello → this device
         rule.onNodeWithTag("use_PHONE").tap()
         rule.onNodeWithTag("profile_SIMPLE").tap()

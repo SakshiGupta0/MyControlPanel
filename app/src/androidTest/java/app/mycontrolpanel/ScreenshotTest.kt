@@ -7,6 +7,8 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.mycontrolpanel.core.Action
@@ -38,7 +40,10 @@ class ScreenshotTest {
         rule.waitForIdle()
     }
 
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
     private fun shot(name: String) {
+        rule.waitForIdle()
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("splash").fetchSemanticsNodes().isEmpty() }   // let the launch hello finish
         rule.waitForIdle()
         val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
         val dir = File(rule.activity.getExternalFilesDir(null), "shots").apply { mkdirs() }
@@ -62,7 +67,7 @@ class ScreenshotTest {
             rule.runOnUiThread { store.dispatch(Action.SwitchMode("morning", OverrideLength.UNTIL_RETURN)) }
             rule.onNodeWithTag("breatherBubble").performClick()
             shot("${label}_2_breather")
-            rule.onNodeWithTag("breatherClose").performClick()
+            rule.onNodeWithTag("breatherClose").performScrollTo().performClick()
             rule.runOnUiThread { store.dispatch(Action.StartOnboarding) }
             shot("${label}_3_setup_1_welcome")
             for (i in 2..5) {

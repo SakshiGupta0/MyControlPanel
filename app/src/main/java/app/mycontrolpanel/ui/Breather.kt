@@ -70,7 +70,7 @@ private val BubbleDeep = Color(0xFF9FB0E6)
 @Composable
 fun BreatherBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val reduce = LocalReduceMotion.current
-    val wide = !LocalWindow.current.compact
+    val wide = false   // a round bubble everywhere: it never covers words
     val tr = rememberInfiniteTransition(label = "bubble")
     val breathe by tr.animateFloat(0.94f, 1.06f, infiniteRepeatable(tween(4000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
     val orbit by tr.animateFloat(0f, 1f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "o")
@@ -86,7 +86,7 @@ fun BreatherBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
             .testTag("breatherBubble"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(Modifier.size(if (wide) 62.dp else 58.dp).scale(if (reduce) 1f else breathe)) {
+        Canvas(Modifier.size(if (LocalWindow.current.compact) 60.dp else 70.dp).scale(if (reduce) 1f else breathe)) {
             val r = size.minDimension / 2
             val c = center
             drawCircle(Brush.radialGradient(listOf(Color.White, BubbleMid, BubbleDeep), Offset(c.x - r * 0.3f, c.y - r * 0.35f), r * 1.3f), r * 0.82f, c)
@@ -134,13 +134,7 @@ fun BreatherScreen(s: AppState, dispatch: Dispatch, onClose: () -> Unit) {
             .testTag("breather"),
     ) {
         PhaseBackdrop(Phase.CALM, Modifier.graphicsLayer { alpha = 0.35f })
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            T("Take a breather", Type.title, ink)
-            T("Nothing else needs you right now. Follow the bubble.", Type.body, ink.copy(alpha = 0.7f), align = TextAlign.Center)
-            val dia = if (win.compact) 260.dp else 340.dp
+        val bubble: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { dia ->
             Box(Modifier.size(dia), contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize()) {
                     val r = size.minDimension / 2 * grow
@@ -151,9 +145,12 @@ fun BreatherScreen(s: AppState, dispatch: Dispatch, onClose: () -> Unit) {
                 }
                 Bean(BeanMood.BREATHE, Modifier.scale(0.75f + grow * 0.3f), size = dia * 0.42f)
             }
+        }
+        val words: @Composable () -> Unit = {
             T(cue, Type.display, ink, Modifier.testTag("breathCue"))
             T(if (breaths == 0) "4 in · 4 hold · 4 out · 4 rest" else "$breaths slow breath${if (breaths == 1) "" else "s"}", Type.label, ink.copy(alpha = 0.6f))
-            Spacer(Modifier.height(4.dp))
+        }
+        val buttons: @Composable () -> Unit = {
             FlowRow(Modifier.widthIn(max = 640.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (sound.playing) SecondaryButton("■  Stop sound", { platform.stopSound() })
@@ -162,6 +159,28 @@ fun BreatherScreen(s: AppState, dispatch: Dispatch, onClose: () -> Unit) {
                     SecondaryButton("Guided calm-down", { onClose(); dispatch(Action.StartRoutine("r_calm_down")) })
                 PrimaryButton("I feel a bit better ♡", onClose, tag = "breatherClose", tall = 60.dp)
             }
+        }
+        if (win.short && win.twoColumn) {
+            // Phone on its side: bubble on the left, words and buttons on the right — all on one screen.
+            Row(Modifier.fillMaxSize().padding(horizontal = win.gutter, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Box(Modifier.weight(0.45f), contentAlignment = Alignment.Center) { bubble(win.height * 0.78f) }
+                Column(Modifier.weight(0.55f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    T("Take a breather", Type.title, ink)
+                    words(); buttons()
+                }
+            }
+        } else Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            T("Take a breather", Type.title, ink)
+            T("Nothing else needs you right now. Follow the bubble.", Type.body, ink.copy(alpha = 0.7f), align = TextAlign.Center)
+            bubble(if (win.compact) 260.dp else 340.dp)
+            words()
+            Spacer(Modifier.height(4.dp))
+            buttons()
         }
     }
 }

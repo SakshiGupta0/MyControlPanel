@@ -122,17 +122,17 @@ fun PhaseBackdrop(phase: Phase, modifier: Modifier = Modifier) {
                     if (i % 7 == 0) fourStar(pos, u * (0.010f + k * 0.012f), sky.glow.copy(alpha = tw))
                     else drawCircle(Color.White.copy(alpha = 0.25f + 0.55f * tw * k), u * 0.0025f + k * u * 0.002f, pos)
                 }
-                val mc = Offset(w * 0.84f, h * 0.15f); val r = u * 0.065f
+                val mc = if (w > h) Offset(w * 0.30f, h * 0.10f) else Offset(w * 0.84f, h * 0.035f + u * 0.07f); val r = u * 0.065f
                 drawCircle(Brush.radialGradient(listOf(sky.glow.copy(alpha = 0.35f), Color.Transparent), mc, r * 4f), r * 4f, mc)
                 crescent(mc, r, sky.glow)
             }
             else -> {
+                // Landscape: in the open sky above the clock (left). Portrait: tucked into the top-right corner.
+                val land = w > h
                 val (sc, sr) = when (phase) {
-                    Phase.MORNING -> Offset(w * 0.80f, h * 0.20f) to u * 0.085f
-                    Phase.WORK -> Offset(w * 0.88f, h * 0.11f) to u * 0.055f
-                    Phase.EVENING -> Offset(w * 0.76f, h * 0.70f) to u * 0.13f
-                    Phase.DAYOFF -> Offset(w * 0.16f, h * 0.13f) to u * 0.065f
-                    else -> Offset(w * 0.84f, h * 0.15f) to u * 0.06f
+                    Phase.EVENING -> (if (land) Offset(w * 0.28f, h * 0.74f) else Offset(w * 0.78f, h * 0.76f)) to u * 0.13f
+                    Phase.MORNING -> (if (land) Offset(w * 0.30f, h * 0.10f) else Offset(w * 0.84f, h * 0.035f + u * 0.08f)) to u * 0.075f
+                    else -> (if (land) Offset(w * 0.30f, h * 0.09f) else Offset(w * 0.86f, h * 0.03f + u * 0.07f)) to u * 0.058f
                 }
                 drawCircle(Brush.radialGradient(listOf(sky.glow.copy(alpha = 0.75f), sky.glow.copy(alpha = 0f)), sc, sr * 5f), sr * 5f, sc)
                 drawCircle(sky.sun, sr, sc)

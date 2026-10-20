@@ -109,6 +109,7 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
                 Banners(s, env, dispatch)
                 if (Feature.NOW in f) NowCard(s, env, dispatch)
                 RightColumnContent(s, env, dispatch, oneColumn = true)
+                Spacer(Modifier.height(72.dp))   // room to scroll the last card clear of the breather bubble
             }
             ActionBar(s, dispatch, Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, p.bg2.copy(alpha = 0.92f), p.bg2.copy(alpha = 0.92f)))).padding(horizontal = win.gutter, vertical = 10.dp))
         }
@@ -130,6 +131,7 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Banners(s, env, dispatch)
             RightColumnContent(s, env, dispatch, oneColumn = false)
+            Spacer(Modifier.height(84.dp))   // room to scroll clear of the breather bubble
         }
     }
 }
@@ -138,8 +140,9 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
 private fun ActionBar(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val f = s.data.prefs.features
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (Feature.BRAIN_DUMP in f) PrimaryButton("＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
-            tag = "captureButton", tall = 60.dp, style = Type.heading)
+        val narrow = LocalWindow.current.width < 420.dp
+        if (Feature.BRAIN_DUMP in f) PrimaryButton(if (narrow) "＋ Brain dump" else "＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
+            tag = "captureButton", tall = if (narrow) 56.dp else 60.dp, style = if (narrow) Type.label else Type.heading)
         else Spacer(Modifier.weight(1f))
         if (Feature.QUICK_ROUTINES in f) SecondaryButton("✦ Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) },
             Modifier.heightIn(min = 60.dp), tag = "quickRoutinesButton")
@@ -155,8 +158,9 @@ private fun RightColumnContent(s: AppState, env: Env, dispatch: Dispatch, oneCol
     if (Feature.TODAY in f) TodayCard(s, env, dispatch)
     val small = listOfNotNull(Feature.WATER.takeIf { it in f }, Feature.MEALS.takeIf { it in f }, Feature.DONE_TALLY.takeIf { it in f })
     if (small.isNotEmpty()) {
-        val narrow = LocalWindow.current.width < 420.dp
-        (if (narrow) small.chunked(1) else listOf(small)).forEach { row ->
+        val win = LocalWindow.current
+        val narrow = win.width < 420.dp
+        (if (narrow) small.chunked(1) else if (win.twoColumn && win.short) small.chunked(2) else listOf(small)).forEach { row ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 row.forEach { feat ->
                     val m = Modifier.weight(if (feat == Feature.DONE_TALLY) 0.8f else 1f).fillMaxHeight()
@@ -173,10 +177,11 @@ private fun RightColumnContent(s: AppState, env: Env, dispatch: Dispatch, oneCol
     if (mode != null && Feature.MODE_WIDGETS in f) {
         val widgets = mode.widgets.filter { it.enabled }.map { it.widget }
             .filter { it != ModeWidget.MUSIC || s.data.prefs.music.provider != app.mycontrolpanel.core.MusicProvider.NONE }
-        (if (oneColumn && LocalWindow.current.width < 640.dp) widgets.chunked(1) else widgets.chunked(2)).forEach { row ->
+        val single = (oneColumn && LocalWindow.current.width < 640.dp) || (LocalWindow.current.twoColumn && LocalWindow.current.short)
+        (if (single) widgets.chunked(1) else widgets.chunked(2)).forEach { row ->
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 row.forEach { w -> ModeWidgetCard(w, mode, s, env, dispatch, Modifier.weight(1f).fillMaxHeight()) }
-                if (row.size == 1 && widgets.size > 1 && !(oneColumn && LocalWindow.current.width < 640.dp)) Spacer(Modifier.weight(1f))
+                if (row.size == 1 && widgets.size > 1 && !single) Spacer(Modifier.weight(1f))
             }
         }
     }
