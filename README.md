@@ -4,7 +4,7 @@
 
 A calm personal command centre for the Samsung Galaxy Tab S6 Lite and for phones (portrait or landscape). It shows the time, which phase of the day you're in, and what to do next, and it guides you through routines one step at a time.
 
-**v1.1.0** — the cosy redesign
+**v1.1.1** — the cosy redesign
 
 ## Install on the tablet
 1. On the tablet, open this repo's **Releases** page (`github.com/SakshiGupta0/MyControlPanel/releases`) and tap the latest `MyControlPanel-v…apk`.
@@ -28,6 +28,10 @@ Builds are published only after the core logic tests and the emulator smoke test
 - Calendar from the tablet's synced calendars; music controls + what's playing
 - Sign in with Google (Firebase), sync across devices, shared task spaces with invite codes, Google Tasks two-way sync
 - New look: Fraunces + DM Sans (OFL, see `licenses/`), warm palette, per-mode colours
+
+## v1.1.1
+- The breather is now a little cluster of see-through soap bubbles (rainbow sheen, wobble) drifting slowly around the dashboard and setup; on busier screens they float in the bottom corner, and every scrolling screen leaves room so nothing stays underneath.
+- Layout audit on phone and tablet, portrait and landscape, normal and large text: Focus fits any screen, the "Today's 3" links wrap instead of squeezing, the phone action bar stays on one line, messages show at the top so they never cover buttons.
 
 ## v1.1.0
 - **Every phase of the day has its own world**, drawn from the app icon: a peach sunrise with the sun rising (Morning), a clear sky (Work), a lavender-and-coral sunset (Evening), a navy night with a crescent moon and twinkling stars (Bedtime), soft greens with drifting leaves (Day Off). Colours, buttons and the status bar follow the phase.
