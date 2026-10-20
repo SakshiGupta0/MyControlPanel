@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -66,41 +67,76 @@ private val BubbleLight = Color(0xFFE4E6FA)
 private val BubbleMid = Color(0xFFC3CDF2)
 private val BubbleDeep = Color(0xFF9FB0E6)
 
-/** A soft bubble floating at the edge of every screen. One tap → breathe. */
+/**
+ * Two or three see-through soap bubbles drifting slowly around the page, wobbling as they go.
+ * Tap them to breathe. Only the bubbles themselves take taps; everything else passes through.
+ */
 @Composable
-fun BreatherBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun FloatingBubbles(onOpen: () -> Unit, modifier: Modifier = Modifier, topInset: androidx.compose.ui.unit.Dp = 72.dp,
+                    bottomInset: androidx.compose.ui.unit.Dp = 100.dp) {
     val reduce = LocalReduceMotion.current
-    val wide = false   // a round bubble everywhere: it never covers words
-    val tr = rememberInfiniteTransition(label = "bubble")
-    val breathe by tr.animateFloat(0.94f, 1.06f, infiniteRepeatable(tween(4000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
-    val orbit by tr.animateFloat(0f, 1f, infiniteRepeatable(tween(9000, easing = LinearEasing)), label = "o")
-    val p = P()
-    Row(
-        modifier
-            .shadow(14.dp, PillShape, ambientColor = Color(0xFF3B4790).copy(alpha = 0.25f), spotColor = Color(0xFF3B4790).copy(alpha = 0.3f))
-            .clip(PillShape)
-            .background(Brush.linearGradient(listOf(BubbleLight, BubbleMid)))
-            .clickable(onClick = onOpen)
-            .semantics { contentDescription = "Take a breather" }
-            .padding(start = 8.dp, end = if (wide) 22.dp else 8.dp, top = 8.dp, bottom = 8.dp)
-            .testTag("breatherBubble"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(Modifier.size(if (LocalWindow.current.compact) 60.dp else 70.dp).scale(if (reduce) 1f else breathe)) {
-            val r = size.minDimension / 2
-            val c = center
-            drawCircle(Brush.radialGradient(listOf(Color.White, BubbleMid, BubbleDeep), Offset(c.x - r * 0.3f, c.y - r * 0.35f), r * 1.3f), r * 0.82f, c)
-            drawCircle(Color.White.copy(alpha = 0.9f), r * 0.82f, c, style = Stroke(r * 0.06f))
-            drawCircle(Color.White.copy(alpha = 0.85f), r * 0.16f, Offset(c.x - r * 0.32f, c.y - r * 0.34f))
-            // two tiny bubbles orbiting
-            for (k in 0 until 2) {
-                val a = (orbit + k * 0.5f) * 2 * PI
-                val o = Offset(c.x + cos(a).toFloat() * r * 0.95f, c.y + sin(a).toFloat() * r * 0.95f)
-                drawCircle(Color.White.copy(alpha = 0.95f), r * 0.10f, o)
-                drawCircle(BubbleDeep, r * 0.10f, o, style = Stroke(r * 0.03f))
+    val tr = rememberInfiniteTransition(label = "bubbles")
+    val drift = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(150_000, easing = LinearEasing)), label = "drift")
+    val wob = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(5_000, easing = LinearEasing)), label = "wob")
+    val shimmer = tr.animateFloat(0f, 360f, infiniteRepeatable(tween(12_000, easing = LinearEasing)), label = "shimmer")
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val cluster = if (LocalWindow.current.compact) 92.dp else 116.dp
+        val d = androidx.compose.ui.platform.LocalDensity.current
+        val sPx = with(d) { cluster.toPx() }
+        val left = with(d) { 8.dp.toPx() }
+        val right = with(d) { maxWidth.toPx() } - sPx - left
+        val top = with(d) { topInset.toPx() }
+        val bottom = (with(d) { maxHeight.toPx() } - with(d) { bottomInset.toPx() } - sPx).coerceAtLeast(top)
+        Box(
+            Modifier
+                .offset {
+                    val t = if (reduce) 0.25f else drift.value
+                    // a slow figure-of-eight across the whole page
+                    val x = left + (right - left) * (0.5f + 0.5f * sin(2 * PI * t + 0.6).toFloat())
+                    val y = top + (bottom - top) * (0.5f + 0.5f * sin(4 * PI * t + 1.2).toFloat())
+                    androidx.compose.ui.unit.IntOffset(x.toInt(), y.toInt())
+                }
+                .size(cluster)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onOpen)
+                .semantics { contentDescription = "Take a breather" }
+                .testTag("breatherBubble"),
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val w = size.minDimension
+                val k = if (reduce) 0f else wob.value
+                val sh = if (reduce) 0f else shimmer.value
+                fun bob(ph: Float, amp: Float) = sin((k + ph) * 2 * PI).toFloat() * amp * w
+                soapBubble(Offset(w * 0.40f + bob(0.0f, 0.015f), w * 0.44f + bob(0.25f, 0.03f)), w * 0.31f, sh, k)
+                soapBubble(Offset(w * 0.80f + bob(0.4f, 0.02f), w * 0.26f + bob(0.65f, 0.04f)), w * 0.17f, sh + 90f, k + 0.3f)
+                soapBubble(Offset(w * 0.70f + bob(0.7f, 0.02f), w * 0.82f + bob(0.1f, 0.035f)), w * 0.12f, sh + 200f, k + 0.6f)
             }
         }
-        if (wide) { Spacer(Modifier.width(10.dp)); T("Take a breather", Type.label, Color(0xFF2E3566)) }
+    }
+}
+
+/** A clear soap bubble: almost invisible inside, a rainbow sheen on the rim, a bright window highlight. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.soapBubble(c: Offset, r0: Float, shimmer: Float, wob: Float) {
+    // a gentle squish so it feels like soap film
+    val sx = 1f + 0.03f * sin(wob * 2 * PI).toFloat()
+    val sy = 2f - sx
+    androidx.compose.ui.graphics.drawscope.scale(sx, sy, c) {
+        val r = r0
+        drawCircle(Brush.radialGradient(
+            0f to Color.White.copy(alpha = 0.02f), 0.72f to Color(0xFFB9C6F5).copy(alpha = 0.07f), 1f to Color(0xFF9FE3E8).copy(alpha = 0.20f),
+            center = c, radius = r), r, c)
+        androidx.compose.ui.graphics.drawscope.rotate(shimmer, c) {
+            drawCircle(Brush.sweepGradient(listOf(
+                Color(0xFFF7A8C8).copy(alpha = 0.65f), Color(0xFFF9DB8B).copy(alpha = 0.5f), Color(0xFF8FE0D6).copy(alpha = 0.65f),
+                Color(0xFFA9B6F5).copy(alpha = 0.7f), Color(0xFFD9A8F2).copy(alpha = 0.6f), Color(0xFFF7A8C8).copy(alpha = 0.65f)), c), r, c,
+                style = Stroke(r * 0.07f))
+        }
+        drawCircle(Color.White.copy(alpha = 0.45f), r * 0.965f, c, style = Stroke(r * 0.02f))
+        // window highlight (top-left) and a soft reflection (bottom-right)
+        drawArc(Color.White.copy(alpha = 0.85f), 200f, 55f, false, Offset(c.x - r * 0.72f, c.y - r * 0.72f), androidx.compose.ui.geometry.Size(r * 1.44f, r * 1.44f),
+            style = Stroke(r * 0.10f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        drawCircle(Color.White.copy(alpha = 0.9f), r * 0.07f, Offset(c.x - r * 0.30f, c.y - r * 0.62f))
+        drawArc(Color.White.copy(alpha = 0.35f), 20f, 45f, false, Offset(c.x - r * 0.78f, c.y - r * 0.78f), androidx.compose.ui.geometry.Size(r * 1.56f, r * 1.56f),
+            style = Stroke(r * 0.05f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
     }
 }
 

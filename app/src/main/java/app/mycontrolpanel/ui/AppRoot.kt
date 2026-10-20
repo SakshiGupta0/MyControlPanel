@@ -107,8 +107,9 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
 
         val features = s.data.prefs.features
         if (app.mycontrolpanel.core.Feature.OVERWHELMED in features && !breathing && !splash)
-            BreatherBubble({ breathing = true },
-                Modifier.align(Alignment.BottomEnd).padding(end = if (win.compact) 12.dp else 24.dp, bottom = if (win.twoColumn && s.ui.screen == app.mycontrolpanel.core.Screen.Dashboard) 20.dp else if (win.short) 84.dp else 104.dp))
+            FloatingBubbles({ breathing = true }, Modifier.fillMaxSize(),
+                topInset = if (win.short) 48.dp else 72.dp,
+                bottomInset = if (win.twoColumn && s.ui.screen == app.mycontrolpanel.core.Screen.Dashboard) 16.dp else if (win.short) 84.dp else 100.dp)
         if (breathing) BreatherScreen(s, dispatch) { breathing = false }
 
         PetalShower()
