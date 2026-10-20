@@ -136,6 +136,8 @@ data class Prefs(
     /** The one Google Tasks list that syncs with the app. */
     val gListId: String = "@default",
     val gListTitle: String = "My Tasks",
+    /** What the panel calls you ("Good morning, …"). Blank = first name from the signed-in account. Follows the account. */
+    val nickname: String = "",
     /** Where music and sleep sounds come from on this device (device-only: apps differ per device). */
     val music: MusicPrefs = MusicPrefs(),
 )

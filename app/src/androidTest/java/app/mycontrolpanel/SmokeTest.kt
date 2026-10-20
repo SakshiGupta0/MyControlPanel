@@ -244,6 +244,9 @@ class SmokeTest {
         rule.runOnUiThread { store.dispatch(Action.StartOnboarding) }
         rule.waitForIdle()
         rule.onNodeWithTag("onboarding").assertExists()
+        rule.onNodeWithTag("onbBack").tap()          // re-running setup starts after the welcome
+        rule.onNodeWithTag("onbNickname").typeIn("Riya")
+        rule.onNodeWithTag("onbNext").tap()
         rule.onNodeWithTag("use_PHONE").tap()
         rule.onNodeWithTag("onbNext").tap()
         rule.onNodeWithTag("profile_SIMPLE").tap()
@@ -263,6 +266,8 @@ class SmokeTest {
         rule.onNodeWithTag("mealsCard").assertDoesNotExist()
         rule.onNodeWithTag("nowCard").assertExists()
         rule.onNodeWithTag("bean", useUnmergedTree = true).assertExists()
+        assertTrue(store.state.value.data.prefs.nickname == "Riya")
+        rule.onNodeWithTag("greeting", useUnmergedTree = true).assertTextContains("Riya", substring = true)
         assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.BUILT_IN)
     }
 

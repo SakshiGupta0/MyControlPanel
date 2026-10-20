@@ -551,6 +551,7 @@ object Reducer {
                 val p = d.prefs
                 val answers = OnboardingAnswers(
                     use = if (p.fullscreen || p.keepScreenOn) DeviceUse.PANEL else DeviceUse.PHONE,
+                    nickname = p.nickname,
                     profile = Onboarding.profileOf(p.features) ?: Profile.BALANCED,
                     worksWeekdays = d.modes.find { it.id == "work" }?.scheduled ?: true,
                     wake = d.modes.find { it.id == "morning" }?.start ?: 7 * 60,

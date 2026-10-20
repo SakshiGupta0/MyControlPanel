@@ -24,7 +24,7 @@ object Sync {
 
     /** Preference fields that follow you across devices. Everything else in Prefs stays on this device. */
     val SYNCED_PREFS = setOf("use24h", "waterTarget", "glassMl", "mealNames", "breakIntervalMin", "sleepAudioUri",
-        "todayLimit", "focusMin", "transitionWarnMin", "chimeOnTransition", "gListId", "gListTitle")
+        "todayLimit", "focusMin", "transitionWarnMin", "chimeOnTransition", "gListId", "gListTitle", "nickname")
 
     fun kindOf(key: String) = key.substringBefore(':')
     fun idOf(key: String) = key.substringAfter(':', "")

@@ -292,6 +292,14 @@ private fun AppearanceSection(s: AppState, dispatch: Dispatch) {
     val p = P()
     val pr = s.data.prefs
     PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("What should I call you?", Type.heading)
+            PanelTextField(pr.nickname, { v -> upd(s, dispatch) { it.copy(nickname = v.take(30)) } }, "Your name or nickname", tag = "nickname")
+            val fallback = s.live.account?.name?.trim()?.substringBefore(' ')
+            T(if (fallback.isNullOrBlank()) "Used in the greeting on the dashboard." else "Leave blank to use “$fallback” from your Google account.", Type.small, p.muted)
+        }
+    }
+    PanelCard(Modifier.fillMaxWidth()) {
         Column {
             ToggleRow("24-hour clock", pr.use24h, { v -> upd(s, dispatch) { it.copy(use24h = v) } }, tag = "toggle24h")
             ToggleRow("High contrast", pr.highContrast, { v -> upd(s, dispatch) { it.copy(highContrast = v) } }, sub = "Pure white background and black text")

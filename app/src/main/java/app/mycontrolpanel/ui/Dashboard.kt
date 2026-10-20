@@ -228,7 +228,7 @@ private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modif
 private fun Greeting(s: AppState, env: Env, modifier: Modifier) {
     val p = P()
     val h = Scheduler.toLocal(s.now, env.zone).hour
-    val name = s.live.account?.name?.trim()?.substringBefore(' ')?.takeIf { it.isNotBlank() }
+    val name = app.mycontrolpanel.core.displayName(s.data.prefs, s.live.account)
     val hello = when (h) {
         in 5..11 -> "Good morning"
         in 12..16 -> "Good afternoon"

@@ -564,6 +564,17 @@ object CoreSuite {
             eq(NotifyStyle.NONE, s.data.routines.first { it.id == "r_morning" }.schedule?.notify, "no routine nagging unless asked")
         },
 
+        "greeting name: nickname wins, else account first name, and it syncs" to {
+            val acct = Account("u1", "a@b.c", "Sakshi Gupta")
+            eq("Sakshi", displayName(Prefs(), acct), "account first name")
+            eq("Saku", displayName(Prefs(nickname = " Saku "), acct), "nickname wins")
+            eq(null, displayName(Prefs(), null), "no name")
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            s = s.go(Action.OnbUpdate(OnboardingAnswers(nickname = "Riya"))); repeat(7) { s = s.go(Action.OnbNext) }
+            eq("Riya", s.data.prefs.nickname, "setup saves it")
+            ok("nickname" in Sync.SYNCED_PREFS, "follows the account")
+            eq("Riya", Codec.decode(Codec.encode(s.data)).prefs.nickname, "survives save/load")
+        },
         "onboarding: no fixed work week, invalid times are refused" to {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             s = s.go(Action.OnbUpdate(OnboardingAnswers(worksWeekdays = false)))

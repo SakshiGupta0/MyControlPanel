@@ -55,7 +55,7 @@ fun OnboardingScreen(s: AppState, sc: Screen.Onboarding, dispatch: Dispatch) {
                     sc.steps.indices.forEach { i -> Dot(if (i <= sc.step) p.accent else p.line, if (i == sc.step) 14.dp else 10.dp) }
                 }
                 when (sc.current) {
-                    OnbStep.WELCOME -> Welcome(s, dispatch)
+                    OnbStep.WELCOME -> { Welcome(s, dispatch); NameField(s, a, ::set) }
                     OnbStep.DEVICE -> {
                         Title("How will you use this device?", "You can set up your phone and a wall panel differently.")
                         DeviceUse.values().forEach { u -> ChoiceCard(u.label, u.blurb, a.use == u, "use_${u.name}") { set(a.copy(use = u)) } }
@@ -112,6 +112,18 @@ private fun Welcome(s: AppState, dispatch: Dispatch) {
                 PrimaryButton("Sign in with Google", { platform.signIn() }, Modifier.fillMaxWidth(), tag = "onbSignIn", tall = 60.dp, style = Type.heading)
                 T("Already use the panel on another device? Sign in with the same account and your setup comes with you.", Type.small, p.muted)
             }
+        }
+    }
+}
+
+@Composable
+private fun NameField(s: AppState, a: OnboardingAnswers, set: (OnboardingAnswers) -> Unit) {
+    val fallback = s.live.account?.name?.trim()?.substringBefore(' ')
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("What should I call you?", Type.heading)
+            PanelTextField(a.nickname, { set(a.copy(nickname = it.take(30))) }, "Your name or nickname", tag = "onbNickname")
+            T(if (fallback.isNullOrBlank()) "Optional — used in the greeting, like “Good morning, Sakshi”." else "Optional — leave blank to use “$fallback”.", Type.small, P().muted)
         }
     }
 }

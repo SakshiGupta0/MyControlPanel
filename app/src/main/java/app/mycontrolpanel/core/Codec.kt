@@ -163,7 +163,7 @@ object Codec {
         "nightDim" to p.nightDim, "dimModeIds" to p.dimModeIds.toList(), "sleepAudioUri" to p.sleepAudioUri,
         "todayLimit" to p.todayLimit, "focusMin" to p.focusMin, "transitionWarnMin" to p.transitionWarnMin,
         "chimeOnTransition" to p.chimeOnTransition, "calendarOn" to p.calendarOn,
-        "features" to p.features.map { it.name }.sorted(), "gListId" to p.gListId, "gListTitle" to p.gListTitle,
+        "features" to p.features.map { it.name }.sorted(), "gListId" to p.gListId, "gListTitle" to p.gListTitle, "nickname" to p.nickname,
         "music" to p.music.let { m -> mapOf("provider" to m.provider.name, "ambient" to m.ambient.name, "sleepTimerMin" to m.sleepTimerMin,
             "appPackage" to m.appPackage, "appName" to m.appName, "link" to m.link, "fileUri" to m.fileUri, "fileName" to m.fileName, "spotifyClientId" to m.spotifyClientId) },
     )
@@ -192,6 +192,7 @@ object Codec {
             features = (m["features"] as? List<*>)?.mapNotNull { n -> Feature.values().find { it.name == n } }?.toSet() ?: d.features,
             gListId = m.str("gListId") ?: d.gListId,
             gListTitle = m.str("gListTitle") ?: d.gListTitle,
+            nickname = m.str("nickname") ?: d.nickname,
             music = (m["music"] as? Map<*, *>)?.let { x ->
                 MusicPrefs(
                     provider = MusicProvider.values().find { it.name == x.str("provider") } ?: MusicProvider.BUILT_IN,

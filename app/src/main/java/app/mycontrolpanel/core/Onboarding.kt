@@ -52,9 +52,14 @@ data class OnboardingAnswers(
     val music: MusicProvider = MusicProvider.BUILT_IN,
     val musicAppPackage: String = "",
     val musicAppName: String = "",
+    val nickname: String = "",
 )
 
 enum class OnbStep { WELCOME, DEVICE, AMOUNT, NEEDS, MUSIC, DAY, READY }
+
+/** The name to greet someone by: their chosen nickname, else the account's first name, else nothing. */
+fun displayName(p: Prefs, account: Account?): String? =
+    p.nickname.trim().ifBlank { account?.name?.trim()?.substringBefore(' ') ?: "" }.takeIf { it.isNotBlank() }
 
 object Onboarding {
     val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP)
@@ -122,6 +127,7 @@ object Onboarding {
         val prefs = devicePrefs(d.prefs, a.use).copy(
             features = if (returning) preset(a.profile) else featuresFor(a),
             music = musicPrefs(d.prefs.music, a),
+            nickname = a.nickname.trim().take(30),
         )
         if (returning) return d.copy(prefs = prefs, onboarded = true)
 
