@@ -271,7 +271,7 @@ class SmokeTest {
         rule.runOnUiThread { store.dispatch(Action.OpenSettings(app.mycontrolpanel.core.SettingsSection.MUSIC)) }
         rule.waitForIdle()
         rule.onNodeWithTag("provider_BUILT_IN").scrollIfPossible().tap()
-        rule.onNodeWithTag("sleepTimer").scrollIfPossible().assertExists()
+        rule.onNodeWithTag("sleepTimer_plus").scrollIfPossible().assertExists()
         rule.onNodeWithTag("provider_SPOTIFY").scrollIfPossible().tap()
         rule.onNodeWithTag("spotifyClientId").scrollIfPossible().assertExists()
         assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.SPOTIFY)
