@@ -40,6 +40,9 @@ class ScreenshotTest {
 
     @Before
     fun reset() {
+        // Android's one-time "Viewing full screen" notice would cover the pictures.
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("settings put secure immersive_mode_confirmations confirmed").close()
         rule.runOnUiThread {
             store.dispatch(Action.ConfirmReset)
             store.dispatch(Action.UpdatePrefs(store.state.value.data.prefs.copy(nickname = "Sakshi")))
