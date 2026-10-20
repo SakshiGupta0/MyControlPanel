@@ -47,6 +47,7 @@ fun OnboardingScreen(s: AppState, sc: Screen.Onboarding, dispatch: Dispatch) {
     val win = LocalWindow.current
     val a = sc.answers
     fun set(n: OnboardingAnswers) = dispatch(Action.OnbUpdate(n))
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     Column(Modifier.fillMaxSize().testTag("onboarding")) {
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -80,7 +81,7 @@ fun OnboardingScreen(s: AppState, sc: Screen.Onboarding, dispatch: Dispatch) {
             Spacer(Modifier.weight(1f))
             PrimaryButton(
                 when (sc.current) { OnbStep.WELCOME -> if (s.live.account == null) "Continue" else "Next"; OnbStep.READY -> "Let's go ✓"; else -> "Next" },
-                { dispatch(Action.OnbNext) }, tag = "onbNext", tall = 58.dp,
+                { focus.clearFocus(); dispatch(Action.OnbNext) }, tag = "onbNext", tall = 58.dp,
             )
         }
     }

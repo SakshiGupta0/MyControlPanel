@@ -108,7 +108,7 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
         val features = s.data.prefs.features
         if (app.mycontrolpanel.core.Feature.OVERWHELMED in features && !breathing && !splash)
             BreatherBubble({ breathing = true },
-                Modifier.align(Alignment.BottomEnd).padding(end = if (win.compact) 12.dp else 24.dp, bottom = if (win.twoColumn) 20.dp else 104.dp))
+                Modifier.align(Alignment.BottomEnd).padding(end = if (win.compact) 12.dp else 24.dp, bottom = if (win.twoColumn && s.ui.screen == app.mycontrolpanel.core.Screen.Dashboard) 20.dp else if (win.short) 84.dp else 104.dp))
         if (breathing) BreatherScreen(s, dispatch) { breathing = false }
 
         PetalShower()

@@ -122,7 +122,7 @@ fun PhaseBackdrop(phase: Phase, modifier: Modifier = Modifier) {
                     if (i % 7 == 0) fourStar(pos, u * (0.010f + k * 0.012f), sky.glow.copy(alpha = tw))
                     else drawCircle(Color.White.copy(alpha = 0.25f + 0.55f * tw * k), u * 0.0025f + k * u * 0.002f, pos)
                 }
-                val mc = if (w > h) Offset(w * 0.30f, h * 0.10f) else Offset(w * 0.84f, h * 0.035f + u * 0.07f); val r = u * 0.065f
+                val mc = if (w > h) Offset(w * 0.30f, h * 0.11f) else Offset(w * 0.53f, h * 0.13f); val r = u * (if (w > h) 0.065f else 0.05f)
                 drawCircle(Brush.radialGradient(listOf(sky.glow.copy(alpha = 0.35f), Color.Transparent), mc, r * 4f), r * 4f, mc)
                 crescent(mc, r, sky.glow)
             }
@@ -131,8 +131,9 @@ fun PhaseBackdrop(phase: Phase, modifier: Modifier = Modifier) {
                 val land = w > h
                 val (sc, sr) = when (phase) {
                     Phase.EVENING -> (if (land) Offset(w * 0.28f, h * 0.74f) else Offset(w * 0.78f, h * 0.76f)) to u * 0.13f
-                    Phase.MORNING -> (if (land) Offset(w * 0.30f, h * 0.10f) else Offset(w * 0.84f, h * 0.035f + u * 0.08f)) to u * 0.075f
-                    else -> (if (land) Offset(w * 0.30f, h * 0.09f) else Offset(w * 0.86f, h * 0.03f + u * 0.07f)) to u * 0.058f
+                    // portrait: between the clock and Mochi's house, like the sun beside the house in the icon
+                    Phase.MORNING -> (if (land) Offset(w * 0.30f, h * 0.11f) else Offset(w * 0.53f, h * 0.13f)) to u * (if (land) 0.075f else 0.05f)
+                    else -> (if (land) Offset(w * 0.30f, h * 0.10f) else Offset(w * 0.53f, h * 0.13f)) to u * (if (land) 0.058f else 0.042f)
                 }
                 drawCircle(Brush.radialGradient(listOf(sky.glow.copy(alpha = 0.75f), sky.glow.copy(alpha = 0f)), sc, sr * 5f), sr * 5f, sc)
                 drawCircle(sky.sun, sr, sc)

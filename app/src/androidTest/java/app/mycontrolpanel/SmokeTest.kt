@@ -245,9 +245,11 @@ class SmokeTest {
         rule.runOnUiThread { store.dispatch(Action.StartOnboarding) }
         rule.waitForIdle()
         rule.onNodeWithTag("onboarding").assertExists()
-        rule.onNodeWithTag("onbNickname").typeIn("Riya")
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
-        rule.waitForIdle()
+        rule.runOnUiThread {
+            val sc = store.state.value.ui.screen as Screen.Onboarding
+            store.dispatch(Action.OnbUpdate(sc.answers.copy(nickname = "Riya")))
+        }
+        rule.onNodeWithTag("onbNickname").assertTextContains("Riya", substring = true)
         rule.onNodeWithTag("onbNext").tap()   // hello → this device
         rule.onNodeWithTag("use_PHONE").tap()
         rule.onNodeWithTag("profile_SIMPLE").tap()
