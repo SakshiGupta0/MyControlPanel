@@ -236,48 +236,63 @@ fun FocusScreen(s: AppState, dispatch: Dispatch) {
     val remaining = Focus.remaining(f, s.now)
     val tint = LocalModeTint.current
     val win = LocalWindow.current
-    val ring = if (win.compact) 260.dp else 420.dp
-    FlowRow(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg2.copy(alpha = 0.25f), p.bg2.copy(alpha = 0.75f))))
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = if (win.compact) win.gutter else 56.dp, vertical = if (win.compact) 20.dp else 36.dp).testTag("focusScreen"),
-        horizontalArrangement = Arrangement.spacedBy(56.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        maxItemsInEachRow = if (win.compact) 1 else 2,
-    ) {
-        Column(Modifier.weight(1f).align(Alignment.CenterVertically), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Eyebrow(if (f.finished) "Time's up" else "Focusing on", p.accent)
-            T(f.label, Type.display.copy(fontSize = 52.sp, lineHeight = 60.sp), maxLines = 3)
-            T(if (f.finished) "Nice work staying with it. Did you finish?" else "Just this. Everything else can wait.", Type.body, p.muted)
-            Spacer(Modifier.height(16.dp))
-            if (f.finished) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (f.taskId != null) PrimaryButton("Yes, it's done ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDone", tall = 64.dp, style = Type.heading)
-                    SecondaryButton(if (f.taskId != null) "Not yet" else "Back to dashboard", { dispatch(Action.EndFocus(false)) }, tag = "focusNotYet")
-                    SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
-                }
-            } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (f.runningSince != null) SecondaryButton("Pause", { dispatch(Action.FocusPause) }, tag = "focusPause")
-                    else PrimaryButton("Resume", { dispatch(Action.FocusResume) }, tag = "focusResume")
-                    SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
-                    if (f.taskId != null) PrimaryButton("Done early ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDoneEarly")
-                }
-                Spacer(Modifier.height(10.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuietButton("‹  Peek at dashboard", { dispatch(Action.GoDashboard) }, color = p.muted)
-                    HoldToExitButton({ dispatch(Action.EndFocus(false)) }, tag = "holdStopFocus", label = "Hold to stop")
-                }
+    val heading: @Composable () -> Unit = {
+        Eyebrow(if (f.finished) "Time's up" else "Focusing on", p.accent)
+        T(f.label, if (win.compact) Type.display else Type.display.copy(fontSize = 52.sp, lineHeight = 60.sp), maxLines = 3)
+        T(if (f.finished) "Nice work staying with it. Did you finish?" else "Just this. Everything else can wait.", Type.body, p.muted)
+    }
+    val controls: @Composable () -> Unit = {
+        if (f.finished) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (f.taskId != null) PrimaryButton("Yes, it's done ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDone", tall = 64.dp, style = Type.heading)
+                SecondaryButton(if (f.taskId != null) "Not yet" else "Back to dashboard", { dispatch(Action.EndFocus(false)) }, tag = "focusNotYet")
+                SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
+            }
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (f.runningSince != null) SecondaryButton("Pause", { dispatch(Action.FocusPause) }, tag = "focusPause")
+                else PrimaryButton("Resume", { dispatch(Action.FocusResume) }, tag = "focusResume")
+                SecondaryButton("+5 min", { dispatch(Action.FocusExtend(5)) })
+                if (f.taskId != null) PrimaryButton("Done early ✓", { dispatch(Action.EndFocus(true)) }, tag = "focusDoneEarly")
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuietButton("‹  Peek at dashboard", { dispatch(Action.GoDashboard) }, color = p.muted)
+                HoldToExitButton({ dispatch(Action.EndFocus(false)) }, tag = "holdStopFocus", label = "Hold to stop")
             }
         }
-        Box(Modifier.size(ring).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
-            ProgressRing(Focus.fraction(f, s.now), Modifier.fillMaxSize(), stroke = 22.dp,
+    }
+    val ringView: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { ring ->
+        Box(Modifier.size(ring), contentAlignment = Alignment.Center) {
+            ProgressRing(Focus.fraction(f, s.now), Modifier.fillMaxSize(), stroke = if (ring < 260.dp) 16.dp else 22.dp,
                 color = if (f.finished) p.warm else p.accent, track = p.card.copy(alpha = 0.8f))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                T(if (f.finished) "✓" else fmtTimer(remaining), Type.clock.copy(fontSize = 96.sp, lineHeight = 100.sp),
-                    if (f.finished) p.warm else p.text, modifier = Modifier.testTag("focusTimer"), align = TextAlign.Center)
+                val big = if (ring < 260.dp) 64.sp else 96.sp
+                T(if (f.finished) "✓" else fmtTimer(remaining), Type.clock.copy(fontSize = big, lineHeight = big * 1.05f),
+                    if (f.finished) p.warm else p.text, modifier = Modifier.testTag("focusTimer"), align = TextAlign.Center, maxLines = 1)
                 if (!f.finished && f.runningSince == null) T("Paused", Type.label, p.muted)
             }
+        }
+    }
+    val bg = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg2.copy(alpha = 0.25f), p.bg2.copy(alpha = 0.75f)))).testTag("focusScreen")
+    if (win.twoColumn) {
+        // Side by side: words and buttons on the left, the ring sized to fit the screen's height on the right.
+        val ring = minOf(win.height - 48.dp, win.width * 0.42f, 440.dp)
+        Row(bg.padding(horizontal = if (win.short) 20.dp else 56.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (win.short) 24.dp else 56.dp)) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                heading(); Spacer(Modifier.height(4.dp)); controls()
+            }
+            ringView(ring)
+        }
+    } else {
+        val ring = minOf(win.width - win.gutter * 2, 420.dp, win.height * 0.42f)
+        Column(bg.verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.widthIn(max = 640.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { heading() }
+            Spacer(Modifier.height(8.dp))
+            ringView(ring)
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.widthIn(max = 640.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) { controls() }
         }
     }
 }

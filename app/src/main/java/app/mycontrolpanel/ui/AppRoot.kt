@@ -109,7 +109,13 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
         if (app.mycontrolpanel.core.Feature.OVERWHELMED in features && !breathing && !splash)
             FloatingBubbles({ breathing = true }, Modifier.fillMaxSize(),
                 topInset = if (win.short) 48.dp else 72.dp,
-                bottomInset = if (win.twoColumn && s.ui.screen == app.mycontrolpanel.core.Screen.Dashboard) 16.dp else if (win.short) 84.dp else 100.dp)
+                bottomInset = when (s.ui.screen) {
+                    app.mycontrolpanel.core.Screen.Dashboard -> if (win.twoColumn) 16.dp else if (win.short) 84.dp else 100.dp
+                    is app.mycontrolpanel.core.Screen.Onboarding -> if (win.short) 84.dp else 100.dp
+                    app.mycontrolpanel.core.Screen.RunningRoutine -> if (win.short) 110.dp else 140.dp   // above the big DONE button
+                    else -> 12.dp                                                                   // corner, over the leaves
+                },
+                roam = s.ui.screen == app.mycontrolpanel.core.Screen.Dashboard || s.ui.screen is app.mycontrolpanel.core.Screen.Onboarding)
         if (breathing) BreatherScreen(s, dispatch) { breathing = false }
 
         PetalShower()
@@ -117,7 +123,8 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
 
         s.ui.message?.let { msg ->
             LaunchedEffect(msg) { delay(4500); dispatch(Action.DismissMessage) }
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = if (LocalWindow.current.compact) 96.dp else 28.dp, start = 16.dp, end = 16.dp)
+            Box(Modifier.align(Alignment.TopCenter).padding(top = 14.dp, start = 16.dp, end = 16.dp)   // top: never covers the buttons along the bottom
+               
                 .clip(RoundedCornerShape(18.dp)).background(p.text)   // not clickable: taps pass through to what's underneath
                 .padding(horizontal = 28.dp, vertical = 16.dp).widthIn(max = 760.dp).testTag("message")) {
                 T(msg, Type.label, p.bg)

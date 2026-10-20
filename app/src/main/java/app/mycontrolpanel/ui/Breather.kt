@@ -75,7 +75,7 @@ private val BubbleDeep = Color(0xFF9FB0E6)
  */
 @Composable
 fun FloatingBubbles(onOpen: () -> Unit, modifier: Modifier = Modifier, topInset: androidx.compose.ui.unit.Dp = 72.dp,
-                    bottomInset: androidx.compose.ui.unit.Dp = 100.dp) {
+                    bottomInset: androidx.compose.ui.unit.Dp = 100.dp, roam: Boolean = true) {
     val reduce = LocalReduceMotion.current
     val tr = rememberInfiniteTransition(label = "bubbles")
     val drift = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(150_000, easing = LinearEasing)), label = "drift")
@@ -93,9 +93,15 @@ fun FloatingBubbles(onOpen: () -> Unit, modifier: Modifier = Modifier, topInset:
             Modifier
                 .offset {
                     val t = if (reduce) 0.25f else drift.value
-                    // a slow figure-of-eight across the whole page
-                    val x = left + (right - left) * (0.5f + 0.5f * sin(2 * PI * t + 0.6).toFloat())
-                    val y = top + (bottom - top) * (0.5f + 0.5f * sin(4 * PI * t + 1.2).toFloat())
+                    val (x, y) = if (roam) {
+                        // a slow figure-of-eight across the whole page
+                        (left + (right - left) * (0.5f + 0.5f * sin(2 * PI * t + 0.6).toFloat())) to
+                            (top + (bottom - top) * (0.5f + 0.5f * sin(4 * PI * t + 1.2).toFloat()))
+                    } else {
+                        // busy screens (settings, editors, lists): float gently in the bottom corner instead of crossing buttons
+                        val b = sin(2 * PI * t * 12).toFloat()
+                        (right - sPx * 0.05f + b * sPx * 0.04f) to (bottom - sPx * 0.08f + sin(2 * PI * t * 9 + 1).toFloat() * sPx * 0.08f)
+                    }
                     androidx.compose.ui.unit.IntOffset(x.toInt(), y.toInt())
                 }
                 .size(cluster)

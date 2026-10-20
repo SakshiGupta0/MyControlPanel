@@ -140,13 +140,16 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
 private fun ActionBar(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val f = s.data.prefs.features
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val narrow = LocalWindow.current.width < 420.dp
+        val win = LocalWindow.current
+        val narrow = win.width < 420.dp || (win.twoColumn && win.short)
         if (Feature.BRAIN_DUMP in f) PrimaryButton(if (narrow) "＋ Brain dump" else "＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
             tag = "captureButton", tall = if (narrow) 56.dp else 60.dp, style = if (narrow) Type.label else Type.heading)
         else Spacer(Modifier.weight(1f))
-        if (Feature.QUICK_ROUTINES in f) SecondaryButton("✦ Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) },
-            Modifier.heightIn(min = 60.dp), tag = "quickRoutinesButton")
-        RoundIconButton("⚙", { dispatch(Action.OpenSettings(SettingsSection.WIDGETS)) }, size = 60.dp, tag = "settingsButton")
+        if (Feature.QUICK_ROUTINES in f) {
+            if (narrow) RoundIconButton("✦", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) }, size = 56.dp, tag = "quickRoutinesButton")
+            else SecondaryButton("✦ Quick", { dispatch(Action.OpenDialog(Dialog.QuickRoutines)) }, Modifier.heightIn(min = 60.dp), tag = "quickRoutinesButton")
+        }
+        RoundIconButton("⚙", { dispatch(Action.OpenSettings(SettingsSection.WIDGETS)) }, size = if (narrow) 56.dp else 60.dp, tag = "settingsButton")
     }
 }
 
@@ -203,9 +206,9 @@ private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modif
     val eff = Derive.effective(s, env)
     val prefs = s.data.prefs
     val (time, ampm) = clockText(s.now, env, prefs.use24h)
-    val phone = LocalWindow.current.width < 420.dp
+    val phone = LocalWindow.current.width < 420.dp || LocalWindow.current.short
     val clockStyle = when {
-        phone -> Type.clock.copy(fontSize = 76.sp, lineHeight = 80.sp, letterSpacing = (-2).sp)
+        phone -> Type.clock.copy(fontSize = 70.sp, lineHeight = 74.sp, letterSpacing = (-2).sp)
         compact -> Type.clock.copy(fontSize = 92.sp, lineHeight = 96.sp, letterSpacing = (-2).sp)
         else -> Type.clock
     }
@@ -219,7 +222,7 @@ private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modif
                 Greeting(s, env, Modifier.padding(top = 12.dp, start = 4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     T(time, clockStyle, modifier = Modifier.testTag("clock"), maxLines = 1)
-                    if (ampm != null) T(ampm, if (phone) Type.heading else Type.title, p.muted, Modifier.padding(start = 6.dp, bottom = if (compact) 12.dp else 22.dp))
+                    if (ampm != null) T(ampm, if (phone) Type.heading else Type.title, p.muted, Modifier.padding(start = 6.dp, bottom = if (compact) 12.dp else 22.dp), maxLines = 1)
                 }
                 T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), if (compact) Type.label else Type.title, p.text.copy(alpha = 0.78f))
                 if (Feature.NEXT_EVENT in prefs.features) NextEventLine(s, env)
@@ -411,14 +414,18 @@ private fun Banners(s: AppState, env: Env, dispatch: Dispatch) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TodayCard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val list = Derive.tasksFor(s, TaskFilter.TODAY, env)
     PanelCard(Modifier.fillMaxWidth().testTag("todayCard")) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("Today's ${s.data.prefs.todayLimit}", modifier = Modifier.weight(1f))
+            // Title on its own line; the two links wrap underneath when space is short (phones, big text).
+            androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Eyebrow("Today's ${s.data.prefs.todayLimit}", modifier = Modifier.align(Alignment.CenterVertically).padding(end = 8.dp))
+                Spacer(Modifier.weight(1f))
                 QuietButton("Pick one for me", { dispatch(Action.PickOne) }, tag = "pickOne")
                 QuietButton("All tasks →", { dispatch(Action.OpenTasks(TaskFilter.TODAY)) }, tag = "openTasks")
             }

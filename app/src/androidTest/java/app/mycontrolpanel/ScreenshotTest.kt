@@ -57,8 +57,9 @@ class ScreenshotTest {
         rule.waitForIdle()
         rule.waitUntil(5_000) { rule.onAllNodesWithTag("splash").fetchSemanticsNodes().isEmpty() }
         rule.waitForIdle()
-        val node = if (dialog) rule.onAllNodes(isRoot()).onLast() else rule.onAllNodes(isRoot()).onFirst()
-        val bmp = node.captureToImage().asAndroidBitmap()
+        Thread.sleep(300)
+        // The whole device screen, dialogs included.
+        val bmp = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         val dir = File(rule.activity.getExternalFilesDir(null), "shots").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) }
     }
