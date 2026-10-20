@@ -65,6 +65,9 @@ import androidx.compose.ui.graphics.drawscope.rotate as drawRotate
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** Space left at the end of scrolling screens so the last button can always scroll clear of the bubbles. */
+val BubbleRoom = 120.dp
+
 private val BubbleLight = Color(0xFFE4E6FA)
 private val BubbleMid = Color(0xFFC3CDF2)
 private val BubbleDeep = Color(0xFF9FB0E6)

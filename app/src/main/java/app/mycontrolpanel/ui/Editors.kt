@@ -58,7 +58,7 @@ private fun EditorFrame(title: String, problem: String?, dispatch: Dispatch, onS
                 if (problem != null) T(problem, Type.small, p.warn)
             }
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)) { left(); right(); Spacer(Modifier.height(40.dp)) }
+                verticalArrangement = Arrangement.spacedBy(16.dp)) { left(); right(); Spacer(Modifier.height(BubbleRoom)) }
             return@Column
         }
         Row(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = 28.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -69,9 +69,9 @@ private fun EditorFrame(title: String, problem: String?, dispatch: Dispatch, onS
         }
         Row(Modifier.fillMaxSize().padding(horizontal = 32.dp), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)) { left(); Spacer(Modifier.height(40.dp)) }
+                verticalArrangement = Arrangement.spacedBy(18.dp)) { left(); Spacer(Modifier.height(BubbleRoom)) }
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)) { right(); Spacer(Modifier.height(40.dp)) }
+                verticalArrangement = Arrangement.spacedBy(18.dp)) { right(); Spacer(Modifier.height(BubbleRoom)) }
         }
     }
 }

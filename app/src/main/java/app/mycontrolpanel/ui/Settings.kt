@@ -63,7 +63,7 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
             SettingsSection.RESET -> ResetSection(dispatch)
             SettingsSection.ABOUT -> AboutSection()
         }
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(BubbleRoom))
     }
     if (win.compact) {
         // Phone: back button + a swipeable row of sections on top, content below.

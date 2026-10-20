@@ -91,6 +91,7 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
                 if (filter == TaskFilter.DONE && list.isNotEmpty()) SecondaryButton("Clear finished", { dispatch(Action.ClearDone) })
                 SecondaryButton("Pick one for me", { dispatch(Action.PickOne) })
             }
+            Spacer(Modifier.height(BubbleRoom))
     }
     if (win.compact) {
         Column(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("tasksScreen")) {
