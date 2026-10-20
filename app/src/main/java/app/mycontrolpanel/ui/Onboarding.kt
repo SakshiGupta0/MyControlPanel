@@ -28,6 +28,7 @@ import app.mycontrolpanel.core.Action
 import app.mycontrolpanel.core.AppState
 import app.mycontrolpanel.core.DeviceUse
 import app.mycontrolpanel.core.Need
+import app.mycontrolpanel.core.MusicProvider
 import app.mycontrolpanel.core.OnbStep
 import app.mycontrolpanel.core.Onboarding
 import app.mycontrolpanel.core.OnboardingAnswers
@@ -64,6 +65,7 @@ fun OnboardingScreen(s: AppState, sc: Screen.Onboarding, dispatch: Dispatch) {
                         Profile.values().forEach { pr -> ChoiceCard(pr.label, pr.blurb, a.profile == pr, "profile_${pr.name}") { set(a.copy(profile = pr)) } }
                     }
                     OnbStep.NEEDS -> NeedsStep(a, ::set)
+                    OnbStep.MUSIC -> MusicStep(a, ::set)
                     OnbStep.DAY -> DayStep(s, a, ::set)
                     OnbStep.READY -> Ready(sc)
                 }
@@ -95,8 +97,9 @@ private fun Title(title: String, sub: String) {
 private fun Welcome(s: AppState, dispatch: Dispatch) {
     val p = P()
     val platform = LocalPlatform.current
-    Spacer(Modifier.height(12.dp))
-    T("Hi! Let's set up your panel.", if (LocalWindow.current.compact) Type.title else Type.display)
+    Spacer(Modifier.height(4.dp))
+    Bean(BeanMood.HAPPY, size = if (LocalWindow.current.compact) 110.dp else 140.dp)
+    T("Hi! I'm Mochi. Let's set up your panel.", if (LocalWindow.current.compact) Type.title else Type.display)
     T("A calm place that shows what time of day it is, what to do next, and helps you through routines — one thing at a time.", Type.body, p.muted)
     Spacer(Modifier.height(8.dp))
     val acct = s.live.account
@@ -157,6 +160,7 @@ private fun Ready(sc: Screen.Onboarding) {
     val p = P()
     val a = sc.answers
     val features = if (sc.returning) Onboarding.preset(a.profile) else Onboarding.featuresFor(a)
+    Bean(BeanMood.CHEER, size = 110.dp)
     T("You're all set", if (LocalWindow.current.compact) Type.title else Type.display)
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -177,3 +181,29 @@ private fun Ready(sc: Screen.Onboarding) {
     T("Everything can be changed later in Settings.", Type.small, p.muted)
 }
 
+
+@Composable
+private fun MusicStep(a: OnboardingAnswers, set: (OnboardingAnswers) -> Unit) {
+    val p = P()
+    val platform = LocalPlatform.current
+    Title("Music and calm sounds", "Where should music come from on this device? No subscription needed.")
+    MusicProvider.values().forEach { m ->
+        ChoiceCard("${m.icon}  ${m.label}", m.blurb, a.music == m, "music_${m.name}") { set(a.copy(music = m)) }
+        if (m == MusicProvider.APP && a.music == MusicProvider.APP) {
+            val apps = androidx.compose.runtime.remember { platform.musicApps() }
+            if (apps.isEmpty()) T("No music apps found — you can pick one later in Settings → Music.", Type.small, p.muted)
+            else FlowRowChips(apps.map { it.second }, apps.indexOfFirst { it.first == a.musicAppPackage }) { i ->
+                set(a.copy(musicAppPackage = apps[i].first, musicAppName = apps[i].second))
+            }
+        }
+    }
+    T("Spotify, connected is optional and can be set up later in Settings → Music.", Type.small, p.muted)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FlowRowChips(labels: List<String>, selected: Int, tagPrefix: String = "chip", onPick: (Int) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        labels.forEachIndexed { i, l -> Chip(l, i == selected, { onPick(i) }, tag = "${tagPrefix}_$i") }
+    }
+}

@@ -550,7 +550,7 @@ object CoreSuite {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             val a = OnboardingAnswers(use = DeviceUse.PHONE, profile = Profile.SIMPLE, needs = setOf(Need.WATER, Need.CALM),
                 worksWeekdays = true, wake = 6 * 60 + 30, workStart = 9 * 60, workEnd = 17 * 60 + 30, sleep = 30)  // 00:30
-            s = s.go(Action.OnbUpdate(a)); repeat(6) { s = s.go(Action.OnbNext) }
+            s = s.go(Action.OnbUpdate(a)); repeat(7) { s = s.go(Action.OnbNext) }
             eq(Screen.Dashboard, s.ui.screen, "finished after last step")
             val f = s.data.prefs.features
             eq(Onboarding.SIMPLE_CORE + setOf(Feature.WATER, Feature.OVERWHELMED), f, "simple + what was asked for")
@@ -567,7 +567,7 @@ object CoreSuite {
         "onboarding: no fixed work week, invalid times are refused" to {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             s = s.go(Action.OnbUpdate(OnboardingAnswers(worksWeekdays = false)))
-            repeat(4) { s = s.go(Action.OnbNext) }
+            repeat(5) { s = s.go(Action.OnbNext) }
             eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on the day step")
             val bad = (s.ui.screen as Screen.Onboarding).answers.copy(workStart = 6 * 60, wake = 8 * 60)
             s = s.go(Action.OnbUpdate(bad)).go(Action.OnbNext)
@@ -586,8 +586,8 @@ object CoreSuite {
             s = s.go(Action.ApplyRemote(listOf(remoteMode)))
             val sc = s.ui.screen as Screen.Onboarding
             ok(sc.returning, "returning"); eq(OnbStep.DEVICE, sc.current, "moved past welcome")
-            eq(listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.READY), sc.steps, "short path")
-            s = s.go(Action.OnbUpdate(sc.answers.copy(profile = Profile.EVERYTHING))).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext)
+            eq(listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.MUSIC, OnbStep.READY), sc.steps, "short path")
+            s = s.go(Action.OnbUpdate(sc.answers.copy(profile = Profile.EVERYTHING))).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext)
             eq(Screen.Dashboard, s.ui.screen, "done")
             eq("Office", s.data.modes.first { it.id == "work" }.name, "synced setup untouched")
             eq(Feature.values().toSet(), s.data.prefs.features, "device shows everything")
@@ -597,7 +597,7 @@ object CoreSuite {
         "onboarding: account data arriving late still protects the synced setup" to {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             s = s.go(Action.AccountChanged(Account("u", "e", "Sakshi"), true))
-            repeat(4) { s = s.go(Action.OnbNext) }   // impatient: already on the day step
+            repeat(5) { s = s.go(Action.OnbNext) }   // impatient: already on the day step
             eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on day step")
             val remoteMode = Sync.Doc("mode:work", t(5, 11), false, Json.write(Codec.modeOut(Defaults.modes()[1].copy(start = 8 * 60))))
             s = s.go(Action.ApplyRemote(listOf(remoteMode)))
@@ -605,6 +605,32 @@ object CoreSuite {
             ok(sc.returning, "switched to returning"); eq(OnbStep.READY, sc.current, "skips the day questions")
             s = s.go(Action.OnbNext)
             eq(8 * 60, s.data.modes.first { it.id == "work" }.start, "synced work time untouched")
+        },
+
+        "music: provider choice is per device, set in setup, and survives restarts" to {
+            var s = Reducer.initial(Defaults.data(), t(5, 12), env)
+            val a = OnboardingAnswers(music = MusicProvider.APP, musicAppPackage = "com.google.android.apps.youtube.music", musicAppName = "YT Music")
+            s = s.go(Action.OnbUpdate(a)); repeat(7) { s = s.go(Action.OnbNext) }
+            val m = s.data.prefs.music
+            eq(MusicProvider.APP, m.provider, "provider"); eq("YT Music", m.appName, "app")
+            s = s.go(Action.SetMusic(m.copy(provider = MusicProvider.BUILT_IN, ambient = Ambient.OCEAN, sleepTimerMin = 45)), s.now + 1000)
+            eq(s.data.prefs.music, Codec.decode(Codec.encode(s.data)).prefs.music, "round trip")
+            ok(Sync.outgoing(s.data).none { it.key == "prefs" && it.json.contains("OCEAN") }, "music choice stays on this device")
+            eq(MusicPrefs(), Codec.decode("""{"schema":3,"prefs":{}}""").prefs.music, "default: calm sounds")
+            eq(OnbStep.MUSIC, Onboarding.steps(true)[Onboarding.returningStepFor(OnbStep.NEEDS)], "late merge on needs → music")
+        },
+
+        "finishing things celebrates (tasks, routines, focus) — unticking doesn't" to {
+            var s = st0().go(Action.Capture("x"))
+            val id = s.data.tasks.single().id
+            ok(Effect.Celebrate in Reducer.reduce(s, Action.ToggleTaskDone(id), s.now, env).effects, "task")
+            s = s.go(Action.ToggleTaskDone(id))
+            ok(Effect.Celebrate !in Reducer.reduce(s, Action.ToggleTaskDone(id), s.now, env).effects, "untick")
+            var r = st0().go(Action.StartRoutine("r_hydrate")); repeat(3) { r = r.go(Action.RoutineDone) }
+            ok(Effect.Celebrate in Reducer.reduce(r, Action.FinishRoutine, r.now, env).effects, "routine")
+            ok(Effect.Celebrate !in Reducer.reduce(st0().go(Action.StartRoutine("r_hydrate")), Action.ExitRoutine, s.now, env).effects, "exit early")
+            val f = st0().go(Action.StartFocus(null, 10))
+            ok(Effect.Celebrate in Reducer.reduce(f, Action.EndFocus(false), f.now + 11 * 60_000, env).effects, "focus finished")
         },
 
         "features gate heads-up and routine prompts" to {

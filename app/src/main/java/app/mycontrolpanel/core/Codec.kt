@@ -164,6 +164,8 @@ object Codec {
         "todayLimit" to p.todayLimit, "focusMin" to p.focusMin, "transitionWarnMin" to p.transitionWarnMin,
         "chimeOnTransition" to p.chimeOnTransition, "calendarOn" to p.calendarOn,
         "features" to p.features.map { it.name }.sorted(), "gListId" to p.gListId, "gListTitle" to p.gListTitle,
+        "music" to p.music.let { m -> mapOf("provider" to m.provider.name, "ambient" to m.ambient.name, "sleepTimerMin" to m.sleepTimerMin,
+            "appPackage" to m.appPackage, "appName" to m.appName, "link" to m.link, "fileUri" to m.fileUri, "fileName" to m.fileName, "spotifyClientId" to m.spotifyClientId) },
     )
 
     fun prefsIn(m: Map<*, *>): Prefs {
@@ -190,6 +192,16 @@ object Codec {
             features = (m["features"] as? List<*>)?.mapNotNull { n -> Feature.values().find { it.name == n } }?.toSet() ?: d.features,
             gListId = m.str("gListId") ?: d.gListId,
             gListTitle = m.str("gListTitle") ?: d.gListTitle,
+            music = (m["music"] as? Map<*, *>)?.let { x ->
+                MusicPrefs(
+                    provider = MusicProvider.values().find { it.name == x.str("provider") } ?: MusicProvider.BUILT_IN,
+                    ambient = Ambient.values().find { it.name == x.str("ambient") } ?: Ambient.RAIN,
+                    sleepTimerMin = x.int("sleepTimerMin", 30).coerceIn(0, 240),
+                    appPackage = x.str("appPackage") ?: "", appName = x.str("appName") ?: "", link = x.str("link") ?: "",
+                    fileUri = x.str("fileUri") ?: "", fileName = x.str("fileName") ?: "",
+                    spotifyClientId = x.str("spotifyClientId") ?: "",
+                )
+            } ?: d.music,
         )
     }
 

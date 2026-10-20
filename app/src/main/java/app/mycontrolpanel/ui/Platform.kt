@@ -28,6 +28,16 @@ interface Platform {
     fun syncGoogleTasksNow()
     fun loadGLists()
     fun createGList(title: String, copyExisting: Boolean)
+    // music & sounds
+    /** Installed music/audio apps as (package, name). */
+    fun musicApps(): List<Pair<String, String>>
+    fun openApp(pkg: String): Boolean
+    /** Opens a playlist/station link in a specific app (falls back to any app). */
+    fun openLink(uri: String, pkg: String): Boolean
+    fun pickAudioFile()
+    fun playAmbient(a: app.mycontrolpanel.core.Ambient, timerMin: Int)
+    fun playFile(uri: String, name: String, timerMin: Int)
+    fun stopSound()
 }
 
 val LocalPlatform = staticCompositionLocalOf<Platform> { error("Platform not provided") }

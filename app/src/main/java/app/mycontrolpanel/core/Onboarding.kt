@@ -49,9 +49,12 @@ data class OnboardingAnswers(
     val workStart: Int = 10 * 60,
     val workEnd: Int = 18 * 60 + 30,
     val sleep: Int = 23 * 60,
+    val music: MusicProvider = MusicProvider.BUILT_IN,
+    val musicAppPackage: String = "",
+    val musicAppName: String = "",
 )
 
-enum class OnbStep { WELCOME, DEVICE, AMOUNT, NEEDS, DAY, READY }
+enum class OnbStep { WELCOME, DEVICE, AMOUNT, NEEDS, MUSIC, DAY, READY }
 
 object Onboarding {
     val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP)
@@ -67,7 +70,20 @@ object Onboarding {
     fun profileOf(f: Set<Feature>): Profile? = Profile.values().firstOrNull { preset(it) == f }
 
     fun steps(returning: Boolean): List<OnbStep> =
-        if (returning) listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.READY) else OnbStep.values().toList()
+        if (returning) listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.MUSIC, OnbStep.READY) else OnbStep.values().toList()
+
+    /** Where to land in the short (returning-account) path from a step of the full path. */
+    fun returningStepFor(current: OnbStep): Int {
+        val short = steps(returning = true)
+        val target = when (current) { OnbStep.NEEDS -> OnbStep.MUSIC; OnbStep.DAY -> OnbStep.READY; else -> current }
+        return short.indexOf(target).coerceAtLeast(1)
+    }
+
+    fun musicPrefs(p: MusicPrefs, a: OnboardingAnswers): MusicPrefs = p.copy(
+        provider = a.music,
+        appPackage = if (a.music == MusicProvider.APP) a.musicAppPackage else p.appPackage,
+        appName = if (a.music == MusicProvider.APP) a.musicAppName else p.appName,
+    )
 
     fun featuresFor(a: OnboardingAnswers): Set<Feature> {
         if (a.profile == Profile.EVERYTHING) return Feature.values().toSet()
@@ -103,7 +119,10 @@ object Onboarding {
      * settings and features change; modes and routines are left exactly as they are.
      */
     fun apply(d: AppData, a: OnboardingAnswers, returning: Boolean): AppData {
-        val prefs = devicePrefs(d.prefs, a.use).copy(features = if (returning) preset(a.profile) else featuresFor(a))
+        val prefs = devicePrefs(d.prefs, a.use).copy(
+            features = if (returning) preset(a.profile) else featuresFor(a),
+            music = musicPrefs(d.prefs.music, a),
+        )
         if (returning) return d.copy(prefs = prefs, onboarded = true)
 
         var modes = d.modes

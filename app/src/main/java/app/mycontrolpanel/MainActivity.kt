@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
     private val app get() = application as App
     private val store get() = app.store
+    private val celebrate = androidx.compose.runtime.mutableIntStateOf(0)
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         store.dispatch(Action.ShowMessage(if (it) "Notifications allowed." else "Notifications stay off. You'll still see dashboard cards."))
@@ -127,7 +128,43 @@ class MainActivity : ComponentActivity() {
         override fun connectGoogleTasks() = app.gtasks.connect(gtasksConsent)
         override fun syncGoogleTasksNow() = app.gtasks.syncNow(gtasksConsent)
         override fun loadGLists() = app.gtasks.loadLists()
+        override fun musicApps(): List<Pair<String, String>> {
+            val pm = packageManager
+            val known = listOf("com.google.android.apps.youtube.music", "com.spotify.music", "com.jio.media.jiobeats", "com.gaana",
+                "com.amazon.mp3", "com.apple.android.music", "com.bsbportal.music", "com.sec.android.app.music", "deezer.android.app",
+                "com.soundcloud.android", "com.google.android.youtube", "com.audible.application", "com.calm.android", "com.getsomeheadspace.android")
+            val byCategory = runCatching {
+                pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC), 0).map { it.activityInfo.packageName }
+            }.getOrDefault(emptyList())
+            return (known + byCategory).distinct().mapNotNull { pkg ->
+                runCatching { pm.getLaunchIntentForPackage(pkg) ?: return@mapNotNull null; pkg to pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull()
+            }
+        }
+        override fun openApp(pkg: String): Boolean {
+            val i = packageManager.getLaunchIntentForPackage(pkg) ?: return false
+            return runCatching { startActivity(i); true }.getOrDefault(false)
+        }
+        override fun openLink(uri: String, pkg: String): Boolean {
+            val base = Intent(Intent.ACTION_VIEW, Uri.parse(uri.trim()))
+            if (pkg.isNotBlank() && runCatching { startActivity(Intent(base).setPackage(pkg)); true }.getOrDefault(false)) return true
+            return runCatching { startActivity(base); true }.getOrDefault(false)
+        }
+        override fun pickAudioFile() { runCatching { audioPicker.launch(arrayOf("audio/*")) } }
+        override fun playAmbient(a: app.mycontrolpanel.core.Ambient, timerMin: Int) = app.mycontrolpanel.system.SoundService.playAmbient(this@MainActivity, a, timerMin)
+        override fun playFile(uri: String, name: String, timerMin: Int) = app.mycontrolpanel.system.SoundService.playFile(this@MainActivity, uri, name, timerMin)
+        override fun stopSound() = app.mycontrolpanel.system.SoundService.stop(this@MainActivity)
         override fun createGList(title: String, copyExisting: Boolean) = app.gtasks.createList(title, copyExisting)
+    }
+
+    /** "A sound from this device": keep read access to the picked file across restarts. */
+    private val audioPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        val name = runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull() ?: "Your sound"
+        val m = store.state.value.data.prefs.music
+        store.dispatch(Action.SetMusic(m.copy(provider = app.mycontrolpanel.core.MusicProvider.DEVICE_FILE, fileUri = uri.toString(), fileName = name.substringBeforeLast('.'))))
     }
 
     private val gtasksConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
@@ -217,7 +254,9 @@ class MainActivity : ComponentActivity() {
             val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
             CompositionLocalProvider(LocalPlatform provides platform, LocalSpotify provides app.spotify) {
                 PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
-                    AppRoot(s, env, store::dispatch)
+                    CompositionLocalProvider(app.mycontrolpanel.ui.LocalCelebrate provides celebrate) {
+                        AppRoot(s, env, store::dispatch)
+                    }
                 }
             }
         }
@@ -240,6 +279,7 @@ class MainActivity : ComponentActivity() {
                         when (e) {
                             Effect.PlayAlert -> playAlert()
                             Effect.Chime -> playChime()
+                            Effect.Celebrate -> celebrate.intValue++
                             else -> {}
                         }
                     }

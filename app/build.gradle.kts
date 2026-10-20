@@ -14,11 +14,9 @@ android {
         applicationId = "app.mycontrolpanel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = 6
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Spotify developer app Client ID (public identifier, not a secret)
-        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${(project.findProperty("spotifyClientId") as String?) ?: ""}\"")
     }
 
     // One fixed key for every build, so a new APK installs over the old one and keeps your data.

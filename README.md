@@ -1,8 +1,10 @@
 # My Control Panel
 
-An always-on room control panel for the Samsung Galaxy Tab S6 Lite (landscape). It shows the time, which phase of the day you're in, and what to do next, and it guides you through routines one step at a time.
+<img src="docs/play-icon-512.png" width="120" align="right" alt="App icon: a cosy house with a sleeping calico cat, half day and half night"/>
 
-**v0.3.0** — core engine + ADHD-friendly redesign + accounts, sync & sharing
+A calm personal command centre for the Samsung Galaxy Tab S6 Lite and for phones (portrait or landscape). It shows the time, which phase of the day you're in, and what to do next, and it guides you through routines one step at a time.
+
+**v1.0.0** — the first full release
 
 ## Install on the tablet
 1. On the tablet, open this repo's **Releases** page (`github.com/SakshiGupta0/MyControlPanel/releases`) and tap the latest `MyControlPanel-v…apk`.
@@ -27,12 +29,20 @@ Builds are published only after the core logic tests and the emulator smoke test
 - Sign in with Google (Firebase), sync across devices, shared task spaces with invite codes, Google Tasks two-way sync
 - New look: Fraunces + DM Sans (OFL, see `licenses/`), warm palette, per-mode colours
 
+## v1.0.0
+- **Music, your way:** built-in calm sounds (rain, ocean, fan, deep/soft hush, white noise) generated on the device, free and offline, with a fade-out sleep timer; or loop any sound file; or any music app (YouTube Music, JioSaavn, Spotify free…) with play/pause/skip; or the full Spotify connection. Chosen per device, during setup or in Settings → Music.
+- **Spotify Client ID is set in the app** (Settings → Music → Spotify, connected), with step-by-step instructions. It's optional; nothing is built in.
+- **Mochi**, a little calico cat drawn in code, lives on the clock and changes with your day: a sun in the morning, focus brows, a nightcap and Zzz at bedtime, and happy eyes when you're caught up.
+- Soft mode doodles behind the clock, a greeting with your name, a petal-and-heart shower when you finish something (off with Reduce motion), and friendlier empty states.
+- New app icon (`docs/play-icon-512.png`).
+- Phones and tablets, portrait and landscape; onboarding asks what you need, including music; choose anything from super simple to everything.
+
 ## Firebase setup
 - `app/google-services.json` is the project config (not a secret).
 - **Security rules:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish.
 
 ## Not yet
-Weather, portrait layout, shared routines (spaces share tasks for now).
+Weather, shared routines (spaces share tasks for now).
 
 ## Code map
 - `app/src/main/java/app/mycontrolpanel/core/`: plain Kotlin with no Android code. It holds the models, scheduler, routine runner, the reducer (the single source of truth), defaults and the JSON codec. Tests are in `app/src/test/.../CoreSuite.kt`.

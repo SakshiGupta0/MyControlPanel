@@ -73,12 +73,16 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
             }
             PanelCard(Modifier.fillMaxWidth()) {
                 Column {
-                    if (list.isEmpty()) T(when (filter) {
-                        TaskFilter.TODAY -> "Nothing picked for today yet."
-                        TaskFilter.INBOX -> "Inbox is empty. Your head is clear 🌿"
-                        TaskFilter.DONE -> "Finished tasks show up here."
-                        else -> "Nothing here."
-                    }, Type.body, p.muted, Modifier.padding(8.dp))
+                    if (list.isEmpty()) Row(Modifier.padding(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Bean(if (filter == TaskFilter.INBOX) BeanMood.HAPPY else BeanMood.CALM, size = 64.dp)
+                        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
+                        T(when (filter) {
+                            TaskFilter.TODAY -> "Nothing picked for today yet. Mochi suggests one small thing."
+                            TaskFilter.INBOX -> "Inbox is empty. Your head is clear 🌿"
+                            TaskFilter.DONE -> "Finished tasks show up here. Mochi is cheering already."
+                            else -> "Nothing here. Cosy."
+                        }, Type.body, p.muted)
+                    }
                     list.forEach { t -> TaskRow(t, s, dispatch) }
                 }
             }

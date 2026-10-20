@@ -249,7 +249,9 @@ class SmokeTest {
         rule.onNodeWithTag("profile_SIMPLE").tap()
         rule.onNodeWithTag("onbNext").tap()
         rule.onNodeWithTag("need_WATER").tap()
-        rule.onNodeWithTag("onbNext").tap()   // needs → day
+        rule.onNodeWithTag("onbNext").tap()   // needs → music
+        rule.onNodeWithTag("music_BUILT_IN").tap()
+        rule.onNodeWithTag("onbNext").tap()   // music → day
         rule.onNodeWithTag("onbNext").tap()   // day → ready
         rule.onNodeWithTag("onbNext").tap()   // finish
         rule.waitForIdle()
@@ -260,6 +262,22 @@ class SmokeTest {
         rule.onNodeWithTag("waterCard").assertExists()
         rule.onNodeWithTag("mealsCard").assertDoesNotExist()
         rule.onNodeWithTag("nowCard").assertExists()
+        rule.onNodeWithTag("bean", useUnmergedTree = true).assertExists()
+        assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.BUILT_IN)
+    }
+
+    @Test
+    fun musicSettingsOfferEveryProviderAndSpotifyKeyIsInApp() {
+        rule.runOnUiThread { store.dispatch(Action.OpenSettings(app.mycontrolpanel.core.SettingsSection.MUSIC)) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("provider_BUILT_IN").scrollIfPossible().tap()
+        rule.onNodeWithTag("sleepTimer").scrollIfPossible().assertExists()
+        rule.onNodeWithTag("provider_SPOTIFY").scrollIfPossible().tap()
+        rule.onNodeWithTag("spotifyClientId").scrollIfPossible().assertExists()
+        assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.SPOTIFY)
+        rule.onNodeWithTag("provider_BUILT_IN").scrollIfPossible().tap()
+        rule.onNodeWithTag("closeSettings").tap()
+        rule.onNodeWithTag("dashboard").assertIsDisplayed()
     }
 
     @Test

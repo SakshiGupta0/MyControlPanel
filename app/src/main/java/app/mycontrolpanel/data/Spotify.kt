@@ -2,7 +2,6 @@ package app.mycontrolpanel.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import app.mycontrolpanel.BuildConfig
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.ContentApi
@@ -38,9 +37,19 @@ class SpotifyEngine(private val ctx: Context) {
         val message: String? = null,
     )
 
-    private val clientId = BuildConfig.SPOTIFY_CLIENT_ID
+    /** The user's own Spotify developer app Client ID, entered in Settings → Music. */
+    private var clientId = ""
     private val prefs = ctx.getSharedPreferences("spotify", Context.MODE_PRIVATE)
-    private val _state = MutableStateFlow(Ui(if (clientId.isBlank()) Status.NOT_CONFIGURED else Status.DISCONNECTED))
+    private val _state = MutableStateFlow(Ui(Status.NOT_CONFIGURED))
+
+    fun configure(id: String) {
+        val clean = id.trim()
+        if (clean == clientId) return
+        disconnect()
+        clientId = clean
+        prefs.edit().putBoolean("linked", false).apply()
+        _state.value = Ui(if (clean.isBlank()) Status.NOT_CONFIGURED else Status.DISCONNECTED)
+    }
     val state: StateFlow<Ui> get() = _state
 
     private var remote: SpotifyAppRemote? = null

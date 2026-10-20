@@ -27,7 +27,10 @@ class App : Application() {
         store = Store(Repository(filesDir), onRoutinesChanged = { Alarms.scheduleNext(this, it) })
         sync = SyncEngine(this, store).also { it.start() }
         gtasks = GoogleTasksSync(this, store).also { it.start() }
-        spotify = app.mycontrolpanel.data.SpotifyEngine(this)
+        spotify = app.mycontrolpanel.data.SpotifyEngine(this).also { sp ->
+            sp.configure(store.state.value.data.prefs.music.spotifyClientId)
+            store.dataListeners += { d -> sp.configure(d.prefs.music.spotifyClientId) }
+        }
     }
 
     companion object {

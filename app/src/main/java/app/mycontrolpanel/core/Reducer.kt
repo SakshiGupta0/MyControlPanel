@@ -67,6 +67,8 @@ sealed interface Effect {
     object PlayAlert : Effect
     /** Softer sound for the mode-change heads-up. */
     object Chime : Effect
+    /** A small happy moment on screen (petals) when something gets finished. */
+    object Celebrate : Effect
     object RetrySave : Effect
 }
 
@@ -171,6 +173,7 @@ sealed interface Action {
     object OnbFinish : Action
     object OnbSkip : Action
     data class SetFeatures(val features: Set<Feature>) : Action
+    data class SetMusic(val music: MusicPrefs) : Action
 }
 
 object Reducer {
@@ -259,7 +262,8 @@ object Reducer {
                 // Return to the exact dashboard; the mode is derived from data, so nothing else to restore.
                 val finished = d.run?.takeIf { it.completed }?.routineId
                 val daily = if (a == Action.FinishRoutine && finished != null) d.daily.copy(routinesDone = d.daily.routinesDone + finished) else d.daily
-                tick(s.copy(data = d.copy(run = null, daily = daily), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
+                val r = tick(s.copy(data = d.copy(run = null, daily = daily), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
+                if (a == Action.FinishRoutine && finished != null) r.copy(effects = r.effects + Effect.Celebrate) else r
             }
 
             // ---------------- settings navigation ----------------
@@ -444,7 +448,7 @@ object Reducer {
                 val t = d.tasks.find { it.id == a.id } ?: return Reduced(s)
                 val nt = if (t.done) t.copy(done = false, doneAt = null, doneBy = null)
                          else t.copy(done = true, doneAt = now, doneBy = if (t.spaceId != null) s.live.account?.name?.substringBefore(' ') else null)
-                Reduced(s.copy(
+                Reduced(effects = if (nt.done) listOf(Effect.Celebrate) else emptyList(), state = s.copy(
                     data = d.copy(tasks = d.tasks.map { if (it.id == t.id) nt else it }),
                     ui = ui.copy(spotlightTaskId = ui.spotlightTaskId?.takeIf { it != t.id || !nt.done },
                         message = if (nt.done) Encourage.forTask(Derive.doneTodayCount(s) + 1, env.rand) else ui.message),
@@ -485,12 +489,13 @@ object Reducer {
                 var tasks = d.tasks
                 if (a.markTaskDone && f.taskId != null) tasks = tasks.map { if (it.id == f.taskId) it.copy(done = true, doneAt = now) else it }
                 val daily = if (completedSession) d.daily.copy(focusDone = d.daily.focusDone + 1) else d.daily
-                tick(s.copy(
+                val r0 = tick(s.copy(
                     data = d.copy(focus = null, tasks = tasks, daily = daily),
                     ui = ui.copy(screen = Screen.Dashboard, dialog = null,
                         spotlightTaskId = ui.spotlightTaskId?.takeIf { !(a.markTaskDone && it == f.taskId) },
                         message = if (a.markTaskDone) "Done. That's real progress." else if (completedSession) "Focus session complete. Take a breath." else null),
                 ), env)
+                if (a.markTaskDone || completedSession) r0.copy(effects = r0.effects + Effect.Celebrate) else r0
             }
 
             // ---------------- live device data ----------------
@@ -510,7 +515,7 @@ object Reducer {
                 val nui = when {
                     sc !is Screen.Onboarding || s.live.account == null -> ui
                     // An account that already has a setup: never let setup questions overwrite it, whatever step we're on.
-                    existing && !sc.returning -> ui.copy(screen = Screen.Onboarding(sc.step.coerceIn(1, 3), sc.answers, returning = true))
+                    existing && !sc.returning -> ui.copy(screen = Screen.Onboarding(Onboarding.returningStepFor(sc.current), sc.answers, returning = true))
                     sc.current == OnbStep.WELCOME -> ui.copy(screen = Screen.Onboarding(1, sc.answers, returning = existing))
                     else -> ui
                 }
@@ -552,6 +557,7 @@ object Reducer {
                     workStart = d.modes.find { it.id == "work" }?.start ?: 10 * 60,
                     workEnd = d.modes.find { it.id == "work" }?.end ?: (18 * 60 + 30),
                     sleep = d.modes.find { it.id == "bedtime" }?.start ?: 23 * 60,
+                    music = p.music.provider, musicAppPackage = p.music.appPackage, musicAppName = p.music.appName,
                 )
                 ui(ui.copy(screen = Screen.Onboarding(1, answers, returning = false), dialog = null))
             }
@@ -578,6 +584,7 @@ object Reducer {
             }
             Action.OnbSkip -> tick(s.copy(data = d.copy(onboarded = true), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
             is Action.SetFeatures -> data(d.copy(prefs = d.prefs.copy(features = a.features)))
+            is Action.SetMusic -> data(d.copy(prefs = d.prefs.copy(music = a.music)))
 
             // ---------------- persistence feedback ----------------
             is Action.SaveFailed -> ui(ui.copy(saveError = a.message))

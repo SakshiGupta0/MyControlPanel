@@ -288,45 +288,6 @@ private fun CalendarSection(s: AppState, dispatch: Dispatch) {
 }
 
 @Composable
-private fun MusicSection(s: AppState, dispatch: Dispatch) {
-    val p = P()
-    val platform = LocalPlatform.current
-    T("Add the Music widget to a mode (Settings → Modes → Edit) to see what's playing on Spotify, with album art and controls, and to pick something to play. It uses Spotify's official connection through the Spotify app — playback control needs Spotify Premium. Your Spotify password never touches this app.", Type.body, p.muted)
-    LocalSpotify.current?.let { eng ->
-        val st = eng.state.collectAsState().value
-        T("Spotify: " + when (st.status) {
-            app.mycontrolpanel.data.SpotifyEngine.Status.CONNECTED -> "connected ✓"
-            app.mycontrolpanel.data.SpotifyEngine.Status.NOT_CONFIGURED -> "not set up in this build"
-            app.mycontrolpanel.data.SpotifyEngine.Status.NOT_INSTALLED -> "app not installed"
-            else -> st.message ?: "not connected"
-        }, Type.label, p.muted)
-        if (st.status != app.mycontrolpanel.data.SpotifyEngine.Status.CONNECTED && st.status != app.mycontrolpanel.data.SpotifyEngine.Status.NOT_CONFIGURED)
-            PrimaryButton("Connect Spotify", { eng.connect(interactive = true) })
-    }
-    PanelCard(Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            T("Sleep playlist", Type.heading)
-            T("In Spotify: ⋯ → Share → Copy link to playlist, then paste here.", Type.small, p.muted)
-            PanelTextField(s.data.prefs.sleepAudioUri, { v -> upd(s, dispatch) { it.copy(sleepAudioUri = v) } }, "Playlist link", tag = "sleepUri")
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PrimaryButton("▶  Test link", {
-                    val uri = s.data.prefs.sleepAudioUri.trim()
-                    if (uri.isEmpty()) dispatch(Action.ShowMessage("Paste a playlist link first."))
-                    else if (!platform.openUri(uri)) dispatch(Action.ShowMessage("Couldn't open that link."))
-                })
-                SecondaryButton("Open Spotify", { if (!platform.openSpotify()) dispatch(Action.ShowMessage("Spotify isn't installed on this tablet.")) })
-            }
-        }
-    }
-    PanelCard(Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            T("Play / pause / skip", Type.heading)
-            T("The Music widget's buttons control whatever is playing (Spotify, YouTube Music…). No permission needed.", Type.body, p.muted)
-        }
-    }
-}
-
-@Composable
 private fun AppearanceSection(s: AppState, dispatch: Dispatch) {
     val p = P()
     val pr = s.data.prefs

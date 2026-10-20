@@ -4,10 +4,30 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Calm sounds keep playing with the screen off -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- Lets the app see Spotify so "Open Spotify" works on Android 11+ -->
+    <!-- Lets the app see the music apps people use, so "My music app" can list and open them (Android 11+) -->
     <queries>
         <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.jio.media.jiobeats" />
+        <package android:name="com.gaana" />
+        <package android:name="com.amazon.mp3" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="com.bsbportal.music" />
+        <package android:name="com.sec.android.app.music" />
+        <package android:name="deezer.android.app" />
+        <package android:name="com.soundcloud.android" />
+        <package android:name="com.audible.application" />
+        <package android:name="com.calm.android" />
+        <package android:name="com.getsomeheadspace.android" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_MUSIC" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="spotify" />
@@ -39,6 +59,11 @@
         </activity>
 
         <receiver android:name=".system.RoutineAlarmReceiver" android:exported="false" />
+
+        <service
+            android:name=".system.SoundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
 
         <receiver android:name=".system.BootReceiver" android:exported="true">

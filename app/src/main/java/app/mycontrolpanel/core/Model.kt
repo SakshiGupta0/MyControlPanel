@@ -136,6 +136,33 @@ data class Prefs(
     /** The one Google Tasks list that syncs with the app. */
     val gListId: String = "@default",
     val gListTitle: String = "My Tasks",
+    /** Where music and sleep sounds come from on this device (device-only: apps differ per device). */
+    val music: MusicPrefs = MusicPrefs(),
+)
+
+enum class MusicProvider(val label: String, val blurb: String, val icon: String) {
+    BUILT_IN("Calm sounds", "Rain, ocean, fan and soft noise, built into the app. Free, works offline.", "🌧️"),
+    DEVICE_FILE("A sound from this device", "Pick any audio file on your phone or tablet; it loops.", "🎵"),
+    APP("My music app", "YouTube Music, Spotify, JioSaavn, Gaana… Play/pause/skip, free plans too.", "📱"),
+    SPOTIFY("Spotify, connected", "Album art, song names and browsing. Full control needs Premium.", "🟢"),
+    NONE("No music", "Hide music controls.", "🔇"),
+}
+
+enum class Ambient(val label: String, val icon: String) {
+    RAIN("Rain", "🌧️"), OCEAN("Ocean", "🌊"), FAN("Fan", "🌀"), BROWN("Deep hush", "🟤"), PINK("Soft hush", "🌸"), WHITE("White noise", "⚪"),
+}
+
+data class MusicPrefs(
+    val provider: MusicProvider = MusicProvider.BUILT_IN,
+    val ambient: Ambient = Ambient.RAIN,
+    val sleepTimerMin: Int = 30,          // 0 = play until stopped
+    val appPackage: String = "",
+    val appName: String = "",
+    val link: String = "",                 // favourite playlist/station link opened in the chosen app
+    val fileUri: String = "",
+    val fileName: String = "",
+    /** Optional: your own Spotify developer app's Client ID (Settings → Music). Blank = Spotify connection off. */
+    val spotifyClientId: String = "",
 )
 
 /** Manual mode override. until = epoch millis, null = until the user returns to schedule. */
