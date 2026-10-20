@@ -60,6 +60,8 @@ import app.mycontrolpanel.core.AppState
 import app.mycontrolpanel.system.SoundService
 import kotlinx.coroutines.delay
 import kotlin.math.PI
+import androidx.compose.ui.graphics.drawscope.scale as drawScale
+import androidx.compose.ui.graphics.drawscope.rotate as drawRotate
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -119,12 +121,12 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.soapBubble(c: Offse
     // a gentle squish so it feels like soap film
     val sx = 1f + 0.03f * sin(wob * 2 * PI).toFloat()
     val sy = 2f - sx
-    androidx.compose.ui.graphics.drawscope.scale(sx, sy, c) {
+    drawScale(sx, sy, c) {
         val r = r0
         drawCircle(Brush.radialGradient(
             0f to Color.White.copy(alpha = 0.02f), 0.72f to Color(0xFFB9C6F5).copy(alpha = 0.07f), 1f to Color(0xFF9FE3E8).copy(alpha = 0.20f),
             center = c, radius = r), r, c)
-        androidx.compose.ui.graphics.drawscope.rotate(shimmer, c) {
+        drawRotate(shimmer, c) {
             drawCircle(Brush.sweepGradient(listOf(
                 Color(0xFFF7A8C8).copy(alpha = 0.65f), Color(0xFFF9DB8B).copy(alpha = 0.5f), Color(0xFF8FE0D6).copy(alpha = 0.65f),
                 Color(0xFFA9B6F5).copy(alpha = 0.7f), Color(0xFFD9A8F2).copy(alpha = 0.6f), Color(0xFFF7A8C8).copy(alpha = 0.65f)), c), r, c,
