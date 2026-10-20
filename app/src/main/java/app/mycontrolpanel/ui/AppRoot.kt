@@ -44,14 +44,26 @@ import app.mycontrolpanel.core.OverrideLength
 import app.mycontrolpanel.core.Screen
 import kotlinx.coroutines.delay
 
+/** The launch hello plays once per app start (not on every rotation). */
+object SplashOnce { var shown = false }
+
 /** Renders the current screen and (at most one) dialog straight from state. */
 @Composable
 fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val reduceMotion = LocalReduceMotion.current
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(p.bg)) {
-      androidx.compose.runtime.CompositionLocalProvider(LocalWindow provides WindowInfo(maxWidth, maxHeight)) {
+    val phase = LocalPhase.current
+    var breathing by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var splash by remember { mutableStateOf(!SplashOnce.shown) }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(p.bg2)) {
+      val win = WindowInfo(maxWidth, maxHeight)
+      // Phones (either way round) get slightly smaller type so things breathe; tablets keep the big panel sizes.
+      val d = androidx.compose.ui.platform.LocalDensity.current
+      val k = if (minOf(maxWidth, maxHeight) < 600.dp) 0.86f else 1f
+      androidx.compose.runtime.CompositionLocalProvider(LocalWindow provides win,
+          androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, d.fontScale * k)) {
       Box(Modifier.fillMaxSize()) {
+        if (p != ContrastPalette) PhaseBackdrop(phase)
         // Key the transition by screen *kind* so typing in an editor doesn't re-animate.
         val kind = when (s.ui.screen) {
             Screen.Dashboard -> "dashboard"; Screen.RunningRoutine -> "routine"
@@ -93,7 +105,14 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
             is Dialog.TaskEditor -> TaskEditorDialog(s, dl.task, dl.isNew, dispatch)
         }
 
+        val features = s.data.prefs.features
+        if (app.mycontrolpanel.core.Feature.OVERWHELMED in features && !breathing && !splash)
+            BreatherBubble({ breathing = true },
+                Modifier.align(Alignment.BottomEnd).padding(end = if (win.compact) 14.dp else 28.dp, bottom = if (win.compact) 108.dp else 116.dp))
+        if (breathing) BreatherScreen(s, dispatch) { breathing = false }
+
         PetalShower()
+        if (splash) SplashIntro(phase) { SplashOnce.shown = true; splash = false }
 
         s.ui.message?.let { msg ->
             LaunchedEffect(msg) { delay(4500); dispatch(Action.DismissMessage) }

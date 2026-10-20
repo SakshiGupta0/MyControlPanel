@@ -14,8 +14,8 @@ android {
         applicationId = "app.mycontrolpanel"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.1"
+        versionCode = 8
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -57,6 +57,7 @@ dependencies {
     androidTestImplementation(bom)
 
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.ui:ui")

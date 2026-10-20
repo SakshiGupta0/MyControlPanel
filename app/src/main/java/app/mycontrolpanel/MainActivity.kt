@@ -58,6 +58,11 @@ import app.mycontrolpanel.core.Ambient
 import app.mycontrolpanel.core.MusicProvider
 import app.mycontrolpanel.system.SoundService
 import app.mycontrolpanel.ui.LocalCelebrate
+import app.mycontrolpanel.ui.LocalPhase
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import app.mycontrolpanel.ui.phaseFor
+import app.mycontrolpanel.ui.palette
+import app.mycontrolpanel.ui.sky
 import app.mycontrolpanel.system.Alarms
 import app.mycontrolpanel.ui.AppRoot
 import app.mycontrolpanel.ui.ContrastPalette
@@ -233,6 +238,7 @@ class MainActivity : ComponentActivity() {
     private var fullscreen = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Back is routed through the store so every screen behaves predictably (PRD §35).
@@ -246,19 +252,20 @@ class MainActivity : ComponentActivity() {
             val env = store.env()
             val prefs = s.data.prefs
             val dimmed = Derive.isDimmed(s, env)
-            val palette = when {
-                dimmed -> NightPalette
-                prefs.highContrast -> ContrastPalette
-                else -> DayPalette
-            }
-            LaunchedEffect(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette) {
-                applyWindow(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette.bg.toArgb())
+            val mode = Derive.effective(s, env).modeOrNull()
+            val hour = java.time.Instant.ofEpochMilli(s.now).atZone(env.zone).hour
+            val phase = phaseFor(mode?.id, mode?.tint, hour, dimmed)
+            val palette = if (prefs.highContrast) ContrastPalette else phase.palette
+            LaunchedEffect(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette, phase) {
+                applyWindow(prefs.keepScreenOn, prefs.fullscreen, dimmed, palette.dark,
+                    (if (prefs.highContrast) palette.bg else phase.sky.top).toArgb(),
+                    (if (prefs.highContrast) palette.bg else phase.sky.hillNear).toArgb())
             }
             LaunchedEffect(prefs.calendarOn) { reloadCalendar() }
-            val tint = Derive.effective(s, env).modeOrNull()?.tint ?: 7
+            val tint = mode?.tint ?: 7
             CompositionLocalProvider(LocalPlatform provides platform, LocalSpotify provides app.spotify) {
                 PanelTheme(palette, tint, prefs.textScale, prefs.reduceMotion) {
-                    CompositionLocalProvider(LocalCelebrate provides celebrate) {
+                    CompositionLocalProvider(LocalCelebrate provides celebrate, LocalPhase provides phase) {
                         AppRoot(s, env, store::dispatch)
                     }
                 }
@@ -329,7 +336,7 @@ class MainActivity : ComponentActivity() {
         if (hasFocus && fullscreen) hideBars() // bars can come back after dialogs or other apps
     }
 
-    private fun applyWindow(keepOn: Boolean, full: Boolean, dimmed: Boolean, bgArgb: Int) {
+    private fun applyWindow(keepOn: Boolean, full: Boolean, dimmed: Boolean, dark: Boolean, topArgb: Int, bottomArgb: Int) {
         if (keepOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         fullscreen = full
@@ -337,11 +344,11 @@ class MainActivity : ComponentActivity() {
         if (full) hideBars() else ctl.show(WindowInsetsCompat.Type.systemBars())
         @Suppress("DEPRECATION")
         run {
-            window.statusBarColor = bgArgb
-            window.navigationBarColor = bgArgb
+            window.statusBarColor = topArgb
+            window.navigationBarColor = bottomArgb
         }
-        ctl.isAppearanceLightStatusBars = !dimmed
-        ctl.isAppearanceLightNavigationBars = !dimmed
+        ctl.isAppearanceLightStatusBars = !dark
+        ctl.isAppearanceLightNavigationBars = false
         window.attributes = window.attributes.apply {
             screenBrightness = if (dimmed) 0.04f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }

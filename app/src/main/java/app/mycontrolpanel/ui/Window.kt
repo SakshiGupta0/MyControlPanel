@@ -15,6 +15,10 @@ data class WindowInfo(val width: Dp, val height: Dp) {
     val portrait: Boolean get() = height > width
     val compact: Boolean get() = width < 600.dp || height < 560.dp || (portrait && width < 840.dp)
     val gutter: Dp get() = if (width < 420.dp) 16.dp else 24.dp
+    /** Landscape with room for two columns (tablets and phones on their side). */
+    val twoColumn: Boolean get() = !portrait && width >= 600.dp
+    /** Not much height (phones in landscape): sections scroll instead of stretching. */
+    val short: Boolean get() = height < 560.dp
 }
 
 val LocalWindow = staticCompositionLocalOf { WindowInfo(1280.dp, 800.dp) }

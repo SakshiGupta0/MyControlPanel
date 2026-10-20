@@ -46,7 +46,7 @@ import app.mycontrolpanel.core.fmtMinutes
 private fun EditorFrame(title: String, problem: String?, dispatch: Dispatch, onSave: () -> Unit, left: @Composable () -> Unit, right: @Composable () -> Unit) {
     val p = P()
     val win = LocalWindow.current
-    Column(Modifier.fillMaxSize().background(p.bg).testTag("editorScreen")) {
+    Column(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("editorScreen")) {
         if (win.compact) {
             Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

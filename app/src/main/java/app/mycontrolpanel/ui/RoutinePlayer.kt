@@ -49,7 +49,7 @@ fun RoutinePlayer(s: AppState, dispatch: Dispatch) {
 
     val tint = LocalModeTint.current
     val padH = if (LocalWindow.current.compact) LocalWindow.current.gutter else 48.dp
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(lerpColor(tint, p.bg, 0.45f), p.bg2)))
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg2.copy(alpha = 0.25f), p.bg2.copy(alpha = 0.75f))))
         .padding(horizontal = padH, vertical = 24.dp).testTag("routineScreen")) {
         if (run.completed) {
             // Return automatically after a moment so the panel never gets stuck here.

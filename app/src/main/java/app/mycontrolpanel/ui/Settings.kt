@@ -67,7 +67,7 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
     }
     if (win.compact) {
         // Phone: back button + a swipeable row of sections on top, content below.
-        Column(Modifier.fillMaxSize().background(p.bg).testTag("settingsScreen")) {
+        Column(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("settingsScreen")) {
             Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeSettings")
@@ -82,7 +82,7 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
         }
         return
     }
-    Row(Modifier.fillMaxSize().background(p.bg).testTag("settingsScreen")) {
+    Row(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("settingsScreen")) {
         // left rail
         Column(Modifier.width(270.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1,8 +1,15 @@
 <resources>
     <style name="Theme.ControlPanel" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/cream</item>
-        <item name="android:statusBarColor">@color/cream</item>
-        <item name="android:navigationBarColor">@color/cream</item>
+        <item name="android:windowBackground">@color/icon_cream</item>
+        <item name="android:statusBarColor">@color/icon_cream</item>
+        <item name="android:navigationBarColor">@color/icon_cream</item>
         <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- Launch: the cosy house icon on cream, then the app's own hello animation. -->
+    <style name="Theme.ControlPanel.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/icon_cream</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.ControlPanel</item>
     </style>
 </resources>

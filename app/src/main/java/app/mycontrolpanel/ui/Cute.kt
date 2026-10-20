@@ -41,7 +41,7 @@ import kotlin.random.Random
 // An original character drawn in code; her face and accessories follow your day.
 // ---------------------------------------------------------------------------
 
-enum class BeanMood { CALM, HAPPY, SLEEPY, FOCUS, MORNING, CHEER }
+enum class BeanMood { CALM, HAPPY, SLEEPY, FOCUS, MORNING, CHEER, BREATHE }
 
 @Composable
 fun Bean(mood: BeanMood, modifier: Modifier = Modifier, size: Dp = 72.dp, color: Color? = null) {
@@ -114,7 +114,7 @@ fun Bean(mood: BeanMood, modifier: Modifier = Modifier, size: Dp = 72.dp, color:
             when {
                 mood == BeanMood.HAPPY || mood == BeanMood.CHEER ->       // ^ ^
                     drawArc(ink, 200f, 140f, false, Offset(ex - r * 1.4f, eyeY - r * 0.6f), Size(r * 2.8f, r * 2.4f), style = Stroke(lw, cap = StrokeCap.Round))
-                mood == BeanMood.SLEEPY || blinking ->                       // ‿ ‿ sleepy
+                mood == BeanMood.SLEEPY || mood == BeanMood.BREATHE || blinking ->                       // ‿ ‿ sleepy
                     drawArc(ink, 20f, 140f, false, Offset(ex - r * 1.4f, eyeY - r * 1.4f), Size(r * 2.8f, r * 2.2f), style = Stroke(lw, cap = StrokeCap.Round))
                 else -> {
                     drawOval(ink, Offset(ex - r, eyeY - r * 1.25f), Size(r * 2f, r * 2.5f))

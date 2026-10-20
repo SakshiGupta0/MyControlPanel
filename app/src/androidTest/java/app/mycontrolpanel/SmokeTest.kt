@@ -46,7 +46,8 @@ class SmokeTest {
     fun resetToDefaults() {
         rule.runOnUiThread {
             store.dispatch(Action.ConfirmReset)
-            store.dispatch(Action.SetFeatures(app.mycontrolpanel.core.Onboarding.preset(app.mycontrolpanel.core.Profile.BALANCED)))
+            // The breather bubble floats over content; it has its own test, so keep it out of the way here.
+            store.dispatch(Action.SetFeatures(app.mycontrolpanel.core.Onboarding.preset(app.mycontrolpanel.core.Profile.BALANCED) - app.mycontrolpanel.core.Feature.OVERWHELMED))
             store.dispatch(Action.DismissMessage)
         }
         rule.waitForIdle()
@@ -244,18 +245,15 @@ class SmokeTest {
         rule.runOnUiThread { store.dispatch(Action.StartOnboarding) }
         rule.waitForIdle()
         rule.onNodeWithTag("onboarding").assertExists()
-        rule.onNodeWithTag("onbBack").tap()          // re-running setup starts after the welcome
         rule.onNodeWithTag("onbNickname").typeIn("Riya")
-        rule.onNodeWithTag("onbNext").tap()
+        rule.onNodeWithTag("onbNext").tap()   // hello → this device
         rule.onNodeWithTag("use_PHONE").tap()
-        rule.onNodeWithTag("onbNext").tap()
         rule.onNodeWithTag("profile_SIMPLE").tap()
-        rule.onNodeWithTag("onbNext").tap()
+        rule.onNodeWithTag("onbNext").tap()   // → what helps + music
         rule.onNodeWithTag("need_WATER").tap()
-        rule.onNodeWithTag("onbNext").tap()   // needs → music
         rule.onNodeWithTag("music_BUILT_IN").tap()
-        rule.onNodeWithTag("onbNext").tap()   // music → day
-        rule.onNodeWithTag("onbNext").tap()   // day → ready
+        rule.onNodeWithTag("onbNext").tap()   // → your day
+        rule.onNodeWithTag("onbNext").tap()   // → all set
         rule.onNodeWithTag("onbNext").tap()   // finish
         rule.waitForIdle()
         rule.onNodeWithTag("dashboard").assertExists()
@@ -265,10 +263,24 @@ class SmokeTest {
         rule.onNodeWithTag("waterCard").assertExists()
         rule.onNodeWithTag("mealsCard").assertDoesNotExist()
         rule.onNodeWithTag("nowCard").assertExists()
-        rule.onNodeWithTag("bean", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("mochiHome", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("breatherBubble").assertExists()   // on in every preset
         assertTrue(store.state.value.data.prefs.nickname == "Riya")
         rule.onNodeWithTag("greeting", useUnmergedTree = true).assertTextContains("Riya", substring = true)
         assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.BUILT_IN)
+    }
+
+    @Test
+    fun breatherBubbleOpensACalmBreathingScreen() {
+        rule.runOnUiThread { store.dispatch(Action.SetFeatures(store.state.value.data.prefs.features + app.mycontrolpanel.core.Feature.OVERWHELMED)) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("breatherBubble").assertIsDisplayed().performClick()
+        rule.onNodeWithTag("breather").assertIsDisplayed()
+        rule.onNodeWithTag("breathCue").assertExists()
+        rule.onNodeWithTag("breatherClose").tap()
+        rule.onNodeWithTag("breather").assertDoesNotExist()
+        rule.onNodeWithTag("dashboard").assertIsDisplayed()
+        rule.onNodeWithTag("backdrop").assertExists()
     }
 
     @Test

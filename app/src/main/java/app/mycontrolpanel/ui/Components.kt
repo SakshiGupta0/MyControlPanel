@@ -78,7 +78,7 @@ fun PanelCard(modifier: Modifier = Modifier, strong: Boolean = false, padding: D
         modifier
             .let { if (soft) it.shadow(10.dp, CardShape, ambientColor = p.shadow.copy(alpha = 0.10f), spotColor = p.shadow.copy(alpha = 0.14f)) else it }
             .clip(CardShape)
-            .background(bg)
+            .background(if (tint == null && p != ContrastPalette) bg.copy(alpha = if (p.dark) 0.90f else 0.94f) else bg)
             .let { if (!soft) it.border(1.dp, p.line, CardShape) else it }
             .padding(padding)
     ) { content() }

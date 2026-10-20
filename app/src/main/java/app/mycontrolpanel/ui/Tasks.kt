@@ -93,7 +93,7 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
             }
     }
     if (win.compact) {
-        Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
+        Column(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("tasksScreen")) {
             Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeTasks")
@@ -106,7 +106,7 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
         }
         return
     }
-    Row(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("tasksScreen")) {
+    Row(Modifier.fillMaxSize().background(p.bg2.copy(alpha = if (p.dark) 0.80f else 0.84f)).testTag("tasksScreen")) {
         Column(Modifier.width(260.dp).fillMaxHeight().background(p.cardStrong).padding(20.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, Modifier.fillMaxWidth(), tag = "closeTasks")
@@ -238,7 +238,7 @@ fun FocusScreen(s: AppState, dispatch: Dispatch) {
     val win = LocalWindow.current
     val ring = if (win.compact) 260.dp else 420.dp
     FlowRow(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(lerpColor(tint, p.bg, 0.5f), p.bg2)))
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg2.copy(alpha = 0.25f), p.bg2.copy(alpha = 0.75f))))
             .verticalScroll(rememberScrollState())
             .padding(horizontal = if (win.compact) win.gutter else 56.dp, vertical = if (win.compact) 20.dp else 36.dp).testTag("focusScreen"),
         horizontalArrangement = Arrangement.spacedBy(56.dp, Alignment.CenterHorizontally),

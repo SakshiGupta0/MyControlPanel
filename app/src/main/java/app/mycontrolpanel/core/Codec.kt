@@ -29,12 +29,16 @@ object Codec {
         val defaults = Defaults.data()
         val modes = (root["modes"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::modeIn) } ?: defaults.modes
         val routines = (root["routines"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::routineIn) } ?: defaults.routines
+        val fileSchema = (root["schema"] as? Number)?.toInt() ?: 0
+        val prefs0 = (root["prefs"] as? Map<*, *>)?.let(::prefsIn) ?: Prefs()
+        // v4: the breather bubble is on for everyone by default.
+        val prefs = if (fileSchema in 1..3) prefs0.copy(features = prefs0.features + Feature.OVERWHELMED) else prefs0
         return AppData(
-            schema = 3,
+            schema = 4,
             modes = modes,
             routines = routines,
             tasks = (root["tasks"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::taskIn) } ?: emptyList(),
-            prefs = (root["prefs"] as? Map<*, *>)?.let(::prefsIn) ?: Prefs(),
+            prefs = prefs,
             override = (root["override"] as? Map<*, *>)?.let { m ->
                 m.str("modeId")?.let { Override(it, m.long("until"), m.long("setAt") ?: 0) }
             },

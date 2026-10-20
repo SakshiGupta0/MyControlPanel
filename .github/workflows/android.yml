@@ -41,6 +41,12 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk "out/MyControlPanel-v${VERSION}.apk"
+      - name: Check the APK is signed with the panel key
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          $APKSIGNER verify --print-certs out/*.apk | tee sig.txt
+          grep -qi "3c3b032adff04ee17dcb32323524c56f6d452882" <(tr -d ':' < sig.txt | tr 'A-Z' 'a-z') || (echo "::error title=signing::APK is not signed with the panel key"; exit 1)
+          echo "::notice title=signed::Signed release APK, SHA-1 3C:3B:03:2A:DF:F0:4E:E1:7D:CB:32:32:35:24:C5:6F:6D:45:28:82"
       - uses: actions/upload-artifact@v4
         with:
           name: apk
@@ -96,7 +102,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
       - name: Run smoke tests on emulator (retry once if the emulator flaked)
         if: steps.smoke1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
@@ -110,7 +116,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest > connected.log 2>&1 || (grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/' ; exit 1)
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
       - name: Report failed tests as annotations
         if: failure()
         run: |
@@ -127,11 +133,17 @@ jobs:
         with:
           name: emulator-test-report-${{ matrix.device }}
           path: app/build/reports/androidTests/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.device }}
+          path: shots/
+          if-no-files-found: ignore
 
   release:
     name: Publish APK
     needs: [build, ui-tests]
-    if: always() && needs.build.result == 'success' && github.event_name != 'pull_request' && (needs.ui-tests.result == 'success' || inputs.release_without_emulator)
+    if: always() && needs.build.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (needs.ui-tests.result == 'success' || inputs.release_without_emulator)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

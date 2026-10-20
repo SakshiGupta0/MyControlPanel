@@ -207,7 +207,7 @@ data class FocusSession(
 
 /** Everything that is persisted to disk. */
 data class AppData(
-    val schema: Int = 3,
+    val schema: Int = 4,
     val modes: List<Mode>,
     val routines: List<Routine>,
     val tasks: List<Task> = emptyList(),

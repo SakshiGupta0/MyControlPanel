@@ -564,6 +564,13 @@ object CoreSuite {
             eq(NotifyStyle.NONE, s.data.routines.first { it.id == "r_morning" }.schedule?.notify, "no routine nagging unless asked")
         },
 
+        "breather bubble: on in every preset, and switched on for older installs" to {
+            Profile.values().forEach { ok(Feature.OVERWHELMED in Onboarding.preset(it), "in ${it.name}") }
+            val old = Codec.decode("""{"schema":3,"prefs":{"features":["NOW"]}}""")
+            eq(setOf(Feature.NOW, Feature.OVERWHELMED), old.prefs.features, "migrated")
+            val cur = Codec.decode(Codec.encode(old.copy(prefs = old.prefs.copy(features = setOf(Feature.NOW)))))
+            eq(setOf(Feature.NOW), cur.prefs.features, "turning it off sticks")
+        },
         "greeting name: nickname wins, else account first name, and it syncs" to {
             val acct = Account("u1", "a@b.c", "Sakshi Gupta")
             eq("Sakshi", displayName(Prefs(), acct), "account first name")
@@ -578,7 +585,7 @@ object CoreSuite {
         "onboarding: no fixed work week, invalid times are refused" to {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             s = s.go(Action.OnbUpdate(OnboardingAnswers(worksWeekdays = false)))
-            repeat(5) { s = s.go(Action.OnbNext) }
+            repeat(3) { s = s.go(Action.OnbNext) }
             eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on the day step")
             val bad = (s.ui.screen as Screen.Onboarding).answers.copy(workStart = 6 * 60, wake = 8 * 60)
             s = s.go(Action.OnbUpdate(bad)).go(Action.OnbNext)
@@ -597,7 +604,7 @@ object CoreSuite {
             s = s.go(Action.ApplyRemote(listOf(remoteMode)))
             val sc = s.ui.screen as Screen.Onboarding
             ok(sc.returning, "returning"); eq(OnbStep.DEVICE, sc.current, "moved past welcome")
-            eq(listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.MUSIC, OnbStep.READY), sc.steps, "short path")
+            eq(listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.NEEDS, OnbStep.READY), sc.steps, "short path")
             s = s.go(Action.OnbUpdate(sc.answers.copy(profile = Profile.EVERYTHING))).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext).go(Action.OnbNext)
             eq(Screen.Dashboard, s.ui.screen, "done")
             eq("Office", s.data.modes.first { it.id == "work" }.name, "synced setup untouched")
@@ -608,7 +615,7 @@ object CoreSuite {
         "onboarding: account data arriving late still protects the synced setup" to {
             var s = Reducer.initial(Defaults.data(), t(5, 12), env)
             s = s.go(Action.AccountChanged(Account("u", "e", "Sakshi"), true))
-            repeat(5) { s = s.go(Action.OnbNext) }   // impatient: already on the day step
+            repeat(3) { s = s.go(Action.OnbNext) }   // impatient: already on the day step
             eq(OnbStep.DAY, (s.ui.screen as Screen.Onboarding).current, "on day step")
             val remoteMode = Sync.Doc("mode:work", t(5, 11), false, Json.write(Codec.modeOut(Defaults.modes()[1].copy(start = 8 * 60))))
             s = s.go(Action.ApplyRemote(listOf(remoteMode)))
@@ -628,7 +635,8 @@ object CoreSuite {
             eq(s.data.prefs.music, Codec.decode(Codec.encode(s.data)).prefs.music, "round trip")
             ok(Sync.outgoing(s.data).none { it.key == "prefs" && it.json.contains("OCEAN") }, "music choice stays on this device")
             eq(MusicPrefs(), Codec.decode("""{"schema":3,"prefs":{}}""").prefs.music, "default: calm sounds")
-            eq(OnbStep.MUSIC, Onboarding.steps(true)[Onboarding.returningStepFor(OnbStep.NEEDS)], "late merge on needs → music")
+            eq(OnbStep.NEEDS, Onboarding.steps(true)[Onboarding.returningStepFor(OnbStep.NEEDS)], "late merge on needs stays there (music)")
+            eq(5, Onboarding.steps(false).size, "five screens")
         },
 
         "finishing things celebrates (tasks, routines, focus) — unticking doesn't" to {

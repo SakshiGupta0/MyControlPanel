@@ -14,7 +14,7 @@ enum class Feature(val label: String, val hint: String) {
     WATER("Water", "Glasses through the day"),
     MEALS("Meals", "Breakfast, lunch, dinner"),
     DONE_TALLY("Done today", "A gentle count of what you finished"),
-    OVERWHELMED("“Feeling overwhelmed?” shortcut", "Two minutes to breathe"),
+    OVERWHELMED("Breather bubble", "A floating bubble on every screen: tap it to breathe when it's a lot"),
 }
 
 enum class Profile(val label: String, val blurb: String) {
@@ -55,14 +55,15 @@ data class OnboardingAnswers(
     val nickname: String = "",
 )
 
-enum class OnbStep { WELCOME, DEVICE, AMOUNT, NEEDS, MUSIC, DAY, READY }
+/** Five friendly screens: hello + name, this device + how much, what helps + music, your day, all set. */
+enum class OnbStep { WELCOME, DEVICE, NEEDS, DAY, READY }
 
 /** The name to greet someone by: their chosen nickname, else the account's first name, else nothing. */
 fun displayName(p: Prefs, account: Account?): String? =
     p.nickname.trim().ifBlank { account?.name?.trim()?.substringBefore(' ') ?: "" }.takeIf { it.isNotBlank() }
 
 object Onboarding {
-    val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP)
+    val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP, Feature.OVERWHELMED)
     val BALANCED_CORE = SIMPLE_CORE + setOf(Feature.TIME_LEFT, Feature.NEXT_EVENT, Feature.MODE_WIDGETS, Feature.QUICK_ROUTINES)
 
     fun preset(p: Profile): Set<Feature> = when (p) {
@@ -75,12 +76,12 @@ object Onboarding {
     fun profileOf(f: Set<Feature>): Profile? = Profile.values().firstOrNull { preset(it) == f }
 
     fun steps(returning: Boolean): List<OnbStep> =
-        if (returning) listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.AMOUNT, OnbStep.MUSIC, OnbStep.READY) else OnbStep.values().toList()
+        if (returning) listOf(OnbStep.WELCOME, OnbStep.DEVICE, OnbStep.NEEDS, OnbStep.READY) else OnbStep.values().toList()
 
     /** Where to land in the short (returning-account) path from a step of the full path. */
     fun returningStepFor(current: OnbStep): Int {
         val short = steps(returning = true)
-        val target = when (current) { OnbStep.NEEDS -> OnbStep.MUSIC; OnbStep.DAY -> OnbStep.READY; else -> current }
+        val target = when (current) { OnbStep.DAY -> OnbStep.READY; else -> current }
         return short.indexOf(target).coerceAtLeast(1)
     }
 

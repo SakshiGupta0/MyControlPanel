@@ -560,7 +560,7 @@ object Reducer {
                     sleep = d.modes.find { it.id == "bedtime" }?.start ?: 23 * 60,
                     music = p.music.provider, musicAppPackage = p.music.appPackage, musicAppName = p.music.appName,
                 )
-                ui(ui.copy(screen = Screen.Onboarding(1, answers, returning = false), dialog = null))
+                ui(ui.copy(screen = Screen.Onboarding(0, answers, returning = false), dialog = null))
             }
             is Action.OnbUpdate -> {
                 val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
@@ -581,7 +581,7 @@ object Reducer {
                 val sc = ui.screen as? Screen.Onboarding ?: return Reduced(s)
                 val nd = Onboarding.apply(d, sc.answers, sc.returning)
                 tick(s.copy(data = nd, ui = ui.copy(screen = Screen.Dashboard, dialog = null,
-                    message = "All set. Change anything later in Settings → Dashboard.")), env)
+                    message = "All set! Tap ⚙ any time to change things.")), env)
             }
             Action.OnbSkip -> tick(s.copy(data = d.copy(onboarded = true), ui = ui.copy(screen = Screen.Dashboard, dialog = null)), env)
             is Action.SetFeatures -> data(d.copy(prefs = d.prefs.copy(features = a.features)))

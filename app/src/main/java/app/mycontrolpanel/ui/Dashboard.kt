@@ -98,10 +98,10 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val win = LocalWindow.current
     val f = s.data.prefs.features
-    val bg = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(p.bg, p.bg2))).testTag("dashboard")
+    val bg = Modifier.fillMaxSize().testTag("dashboard")
 
-    if (win.compact) {
-        // Phone / narrow / short screens: one scrolling column, actions pinned at the bottom (always reachable).
+    if (!win.twoColumn) {
+        // Portrait (phones and tablets): one scrolling column / short screens: one scrolling column, actions pinned at the bottom (always reachable).
         Column(bg) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = win.gutter, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -110,15 +110,18 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
                 if (Feature.NOW in f) NowCard(s, env, dispatch)
                 RightColumnContent(s, env, dispatch, oneColumn = true)
             }
-            ActionBar(s, dispatch, Modifier.fillMaxWidth().background(p.bg2).padding(horizontal = win.gutter, vertical = 10.dp))
+            ActionBar(s, dispatch, Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, p.bg2.copy(alpha = 0.92f), p.bg2.copy(alpha = 0.92f)))).padding(horizontal = win.gutter, vertical = 10.dp))
         }
         return
     }
 
-    Row(bg.padding(horizontal = 32.dp, vertical = 24.dp), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+    val short = win.short
+    Row(bg.padding(horizontal = if (short) 18.dp else 32.dp, vertical = if (short) 12.dp else 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (short) 16.dp else 28.dp)) {
         // ---------------- left: where am I in the day + the one thing ----------------
-        Column(Modifier.weight(0.44f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TimePanel(s, env, dispatch, Modifier.fillMaxWidth().weight(1f), compact = false)
+        Column(Modifier.weight(if (short) 0.48f else 0.44f).fillMaxHeight().then(if (short) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+            verticalArrangement = Arrangement.spacedBy(if (short) 10.dp else 16.dp)) {
+            TimePanel(s, env, dispatch, if (short) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().weight(1f), compact = short)
             if (Feature.NOW in f) NowCard(s, env, dispatch)
             ActionBar(s, dispatch, Modifier.fillMaxWidth())
         }
@@ -177,7 +180,6 @@ private fun RightColumnContent(s: AppState, env: Env, dispatch: Dispatch, oneCol
             }
         }
     }
-    if (Feature.OVERWHELMED in f) Overwhelmed(s, dispatch)
     val sync = when (s.live.syncStatus) {
         app.mycontrolpanel.core.SyncStatus.SYNCED -> " · synced ✓"
         app.mycontrolpanel.core.SyncStatus.OFFLINE -> " · offline, will sync later"
@@ -196,30 +198,30 @@ private fun TimePanel(s: AppState, env: Env, dispatch: Dispatch, modifier: Modif
     val eff = Derive.effective(s, env)
     val prefs = s.data.prefs
     val (time, ampm) = clockText(s.now, env, prefs.use24h)
-    val clockStyle = if (compact) Type.clock.copy(fontSize = 92.sp, lineHeight = 96.sp, letterSpacing = (-2).sp) else Type.clock
+    val phone = LocalWindow.current.width < 420.dp
+    val clockStyle = when {
+        phone -> Type.clock.copy(fontSize = 76.sp, lineHeight = 80.sp, letterSpacing = (-2).sp)
+        compact -> Type.clock.copy(fontSize = 92.sp, lineHeight = 96.sp, letterSpacing = (-2).sp)
+        else -> Type.clock
+    }
     val modeId = eff.modeOrNull()?.id
     val mood = beanMoodFor(modeId, focusing = s.data.focus?.let { !it.finished } == true, caughtUp = Derive.now(s, env) is NowItem.Rest)
-    Box(modifier.clip(RoundedCornerShape(if (compact) 28.dp else 36.dp))
-        .background(Brush.linearGradient(listOf(tint, lerpColor(tint, p.bg, 0.55f))))) {
-    ModeDoodles(modeId, Modifier.matchParentSize())
-    Column(
-        Modifier.fillMaxWidth().then(if (compact) Modifier else Modifier.fillMaxHeight())
-            .padding(horizontal = if (compact) 22.dp else 30.dp, vertical = if (compact) 18.dp else 24.dp),
-    ) {
+    // No box: the clock sits right on today's sky, with Mochi's little house beside it.
+    Column(modifier.padding(horizontal = 4.dp, vertical = if (compact) 4.dp else 8.dp)) {
         ModeHeader(eff, s, env, dispatch)
-        Greeting(s, env, Modifier.padding(top = 10.dp, start = 4.dp))
-        if (compact) Spacer(Modifier.height(6.dp)) else Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.Bottom) {
-            T(time, clockStyle, modifier = Modifier.testTag("clock"), maxLines = 1)
-            if (ampm != null) T(ampm, Type.title, p.muted, Modifier.padding(start = 8.dp, bottom = if (compact) 14.dp else 22.dp))
-            Spacer(Modifier.weight(1f))
-            Bean(mood, size = if (compact) 78.dp else 124.dp, modifier = Modifier.padding(bottom = if (compact) 8.dp else 14.dp))
+        Row(Modifier.fillMaxWidth().then(if (compact) Modifier else Modifier.weight(1f)), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Greeting(s, env, Modifier.padding(top = 12.dp, start = 4.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    T(time, clockStyle, modifier = Modifier.testTag("clock"), maxLines = 1)
+                    if (ampm != null) T(ampm, if (phone) Type.heading else Type.title, p.muted, Modifier.padding(start = 6.dp, bottom = if (compact) 12.dp else 22.dp))
+                }
+                T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), if (compact) Type.label else Type.title, p.text.copy(alpha = 0.78f))
+                if (Feature.NEXT_EVENT in prefs.features) NextEventLine(s, env)
+            }
+            MochiHome(mood, size = when { phone -> 118.dp; compact -> 150.dp; else -> 210.dp })
         }
-        T(Scheduler.toLocal(s.now, env.zone).format(DATE_FMT), if (compact) Type.heading else Type.title, p.text.copy(alpha = 0.75f))
-        if (Feature.NEXT_EVENT in prefs.features) NextEventLine(s, env)
-        if (compact) Spacer(Modifier.height(14.dp)) else Spacer(Modifier.weight(1f))
-        if (Feature.TIME_LEFT in prefs.features) TimeLeftBar(s, env, eff)
-    }
+        if (Feature.TIME_LEFT in prefs.features) { Spacer(Modifier.height(if (compact) 10.dp else 14.dp)); TimeLeftBar(s, env, eff) }
     }
 }
 
@@ -511,20 +513,6 @@ private fun DoneTodayCard(s: AppState, env: Env, modifier: Modifier) {
             T(if (n == 0) "✿" else "$n", Type.display, p.warm)
             T(if (n == 0) "The day's still young." else if (n == 1) "thing finished" else "things finished", Type.small, p.muted)
         }
-    }
-}
-
-@Composable
-private fun Overwhelmed(s: AppState, dispatch: Dispatch) {
-    val p = P()
-    val calm = s.data.routines.find { it.id == "r_calm_down" && it.enabled } ?: return
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { dispatch(Action.StartRoutine(calm.id)) }
-            .padding(vertical = 14.dp, horizontal = 6.dp).testTag("overwhelmed"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        T("🫧", Type.heading); Spacer(Modifier.width(12.dp))
-        T("Feeling overwhelmed? Take two minutes to breathe →", Type.label, p.muted)
     }
 }
 
