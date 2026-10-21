@@ -99,7 +99,7 @@ fun mochiLines(s: AppState, env: Env, phase: Phase): List<String> {
     val hour = Scheduler.toLocal(s.now, env.zone).hour
     if (hour >= 12 && s.data.daily.water * 2 < prefs.waterTarget) out += "Sip of water? 💧"
     if (s.data.focus?.let { !it.finished } == true) { out.clear(); out += listOf("Shh… you're focusing 🤫", "You've got this 💪") }
-    val done = s.data.tasks.count { it.done && (it.doneAt ?: 0) > s.now - 18 * 3_600_000L }
+    val done = s.data.tasks.count { it.done && (it.doneAt ?: 0L) > s.now - 18 * 3_600_000L }
     if (done > 0) out += listOf("Look at you go! ⭐", "$done done today 🎉")
     if (Derive.now(s, env) is NowItem.Rest) out += "All caught up! Rest is allowed"
     return out

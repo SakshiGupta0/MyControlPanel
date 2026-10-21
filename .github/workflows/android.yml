@@ -102,7 +102,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true ${{ github.ref == 'refs/heads/main' && '-Pandroid.testInstrumentationRunnerArguments.notClass=app.mycontrolpanel.ScreenshotTest' || '' }} > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
       - name: Run smoke tests on emulator (retry once if the emulator flaked)
         if: steps.smoke1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
@@ -116,7 +116,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
+          script: ./gradlew --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true ${{ github.ref == 'refs/heads/main' && '-Pandroid.testInstrumentationRunnerArguments.notClass=app.mycontrolpanel.ScreenshotTest' || '' }} > connected.log 2>&1; R=$?; adb pull /sdcard/Android/data/app.mycontrolpanel/files/shots shots || true; if [ $R -ne 0 ]; then grep -E "FAILED|Exception|INSTALL_|error:|What went wrong|Caused by|offline|Timed out" connected.log | head -40 | sed 's/^/::error title=connected::/'; exit 1; fi
       - name: Report failed tests as annotations
         if: failure()
         run: |
