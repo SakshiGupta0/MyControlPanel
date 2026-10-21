@@ -269,6 +269,7 @@ class SmokeTest {
         rule.onNodeWithTag("nowCard").assertExists()
         rule.onNodeWithTag("mochiHome", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("breatherBubble").assertExists()   // on in every preset
+        rule.onNodeWithTag("mochi").assertExists()            // Mochi wanders on the dashboard
         assertTrue(store.state.value.data.prefs.nickname == "Riya")
         rule.onNodeWithTag("greeting", useUnmergedTree = true).assertTextContains("Riya", substring = true)
         assertTrue(store.state.value.data.prefs.music.provider == app.mycontrolpanel.core.MusicProvider.BUILT_IN)

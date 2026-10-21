@@ -63,11 +63,23 @@ import app.mycontrolpanel.core.DAY_SHORT
 import app.mycontrolpanel.core.fmtMinutes
 import kotlinx.coroutines.launch
 
-val CardShape = RoundedCornerShape(24.dp)
+val CardShape = RoundedCornerShape(26.dp)
 val PillShape = RoundedCornerShape(50)
 
 @Composable
 fun P(): Palette = LocalPalette.current
+
+// ---- readable text on any background, in every phase -------------------------------------------
+private fun lum(c: Color): Double {
+    fun ch(v: Float) = if (v <= 0.03928f) v / 12.92 else Math.pow(((v + 0.055) / 1.055), 2.4)
+    return 0.2126 * ch(c.red) + 0.7152 * ch(c.green) + 0.0722 * ch(c.blue)
+}
+fun contrast(a: Color, b: Color): Double { val x = lum(a); val y = lum(b); return (maxOf(x, y) + 0.05) / (minOf(x, y) + 0.05) }
+/** The candidate with the best contrast against [bg] (first one that reaches 4.5:1 wins, so the palette's own colour is kept when it reads well). */
+fun readableOn(bg: Color, vararg prefer: Color, min: Double = 4.5): Color {
+    val all = prefer.toList() + listOf(Color(0xFF2A2622), Color(0xFFFFFAF2))
+    return all.firstOrNull { contrast(it, bg) >= min } ?: all.maxBy { contrast(it, bg) }
+}
 
 @Composable
 fun PanelCard(modifier: Modifier = Modifier, strong: Boolean = false, padding: Dp = 22.dp, tint: Color? = null, content: @Composable () -> Unit) {
@@ -79,7 +91,7 @@ fun PanelCard(modifier: Modifier = Modifier, strong: Boolean = false, padding: D
             .let { if (soft) it.shadow(10.dp, CardShape, ambientColor = p.shadow.copy(alpha = 0.10f), spotColor = p.shadow.copy(alpha = 0.14f)) else it }
             .clip(CardShape)
             .background(if (tint == null && p != ContrastPalette) bg.copy(alpha = if (p.dark) 0.90f else 0.94f) else bg)
-            .let { if (!soft) it.border(1.dp, p.line, CardShape) else it }
+            .let { if (!soft) it.border(1.dp, p.line, CardShape) else it.border(1.dp, Color.White.copy(alpha = 0.65f), CardShape) }   // a soft glassy edge
             .padding(padding)
     ) { content() }
 }
@@ -172,8 +184,8 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         enabled = enabled,
         modifier = modifier.heightIn(min = tall).let { if (tag != null) it.testTag(tag) else it },
         shape = PillShape,
-        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent,
-            disabledContainerColor = p.cardStrong, disabledContentColor = p.muted),
+        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = readableOn(p.accent, p.onAccent),
+            disabledContainerColor = p.cardStrong, disabledContentColor = readableOn(p.cardStrong, p.muted).copy(alpha = 0.75f)),
         contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
     ) { Text(text, style = style) }
 }
@@ -187,15 +199,19 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         modifier = modifier.heightIn(min = 52.dp).let { if (tag != null) it.testTag(tag) else it },
         shape = PillShape,
         border = androidx.compose.foundation.BorderStroke(1.5.dp, (color ?: p.line)),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = color ?: p.text),
+        // a soft filled pill, so the words never sit straight on a sky of the same colour
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = p.card.copy(alpha = 0.92f),
+            contentColor = readableOn(p.card, *listOfNotNull(color, p.text).toTypedArray())),
         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp),
     ) { Text(text, style = Type.label) }
 }
 
 @Composable
 fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, tag: String? = null, color: Color? = null) {
-    TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).let { if (tag != null) it.testTag(tag) else it }) {
-        Text(text, style = Type.label, color = color ?: P().accent)
+    val p = P()
+    TextButton(onClick = onClick, modifier = modifier.heightIn(min = 48.dp).let { if (tag != null) it.testTag(tag) else it },
+        colors = ButtonDefaults.textButtonColors(containerColor = p.card.copy(alpha = 0.55f))) {
+        Text(text, style = Type.label, color = readableOn(p.card, color ?: p.accent, p.text, min = 3.0))
     }
 }
 
@@ -212,7 +228,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
             .let { if (tag != null) it.testTag(tag) else it }
             .padding(horizontal = 18.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(text, style = Type.label, color = if (selected) p.onAccent else p.text) }
+    ) { Text(text, style = Type.label, color = if (selected) readableOn(p.accent, p.onAccent) else readableOn(p.card, p.text)) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -273,7 +289,7 @@ fun RoundIconButton(glyph: String, onClick: () -> Unit, enabled: Boolean = true,
             .clickable(enabled = enabled, onClick = onClick)
             .let { if (tag != null) it.testTag(tag) else it },
         contentAlignment = Alignment.Center,
-    ) { Text(glyph, style = Type.heading, color = if (!enabled) p.line else if (filled) p.onAccent else p.text) }
+    ) { Text(glyph, style = Type.heading, color = if (!enabled) p.muted.copy(alpha = 0.5f) else if (filled) readableOn(p.accent, p.onAccent) else readableOn(p.cardStrong, p.text)) }
 }
 
 @Composable

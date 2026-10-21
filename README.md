@@ -1,15 +1,15 @@
-# My Control Panel
+# DayDock
 
 <img src="docs/play-icon-512.png" width="120" align="right" alt="App icon: a cosy house with a sleeping calico cat, half day and half night"/>
 
 A calm personal command centre for the Samsung Galaxy Tab S6 Lite and for phones (portrait or landscape). It shows the time, which phase of the day you're in, and what to do next, and it guides you through routines one step at a time.
 
-**v1.1.1** — the cosy redesign
+**v1.2.0** — DayDock
 
 ## Install on the tablet
-1. On the tablet, open this repo's **Releases** page (`github.com/SakshiGupta0/MyControlPanel/releases`) and tap the latest `MyControlPanel-v…apk`.
+1. On the tablet, open this repo's **Releases** page (`github.com/SakshiGupta0/MyControlPanel/releases`) and tap the latest `DayDock-v…apk`.
 2. If Android asks, allow **Install unknown apps** for your browser.
-3. Open **My Control Panel**. New builds install over the old one and keep your settings, because every build is signed with the same key in `keystore/`.
+3. Open **DayDock**. New builds install over the old one and keep your settings, because every build is signed with the same key in `keystore/`.
 
 Builds are published only after the core logic tests and the emulator smoke tests pass (see the Actions tab).
 
@@ -28,6 +28,13 @@ Builds are published only after the core logic tests and the emulator smoke test
 - Calendar from the tablet's synced calendars; music controls + what's playing
 - Sign in with Google (Firebase), sync across devices, shared task spaces with invite codes, Google Tasks two-way sync
 - New look: Fraunces + DM Sans (OFL, see `licenses/`), warm palette, per-mode colours
+
+## v1.2.0 — DayDock
+- The app is now called **DayDock** (the app ID stays `app.mycontrolpanel`, so it updates in place and sign-in keeps working).
+- Soft, bubbly type: **Fredoka** for the clock and titles, **Nunito** for everything you read (OFL, see `licenses/`).
+- **Mochi is a companion now**: she wanders around the dashboard, tasks and settings, hops up onto cards, buttons and tabs, sits a while, and now and then says something small in a speech bubble — about the time of day, water, focus, or cheering when you finish something. She never takes a tap. Turn her off in Settings → Dashboard → "Mochi wanders about".
+- Bigger breather bubbles.
+- Readable buttons in every phase: button and chip text picks its colour by contrast against its own background; quiet links and outline buttons get a soft pill so they never sit on a same-coloured sky.
 
 ## v1.1.1
 - The breather is now a little cluster of see-through soap bubbles (rainbow sheen, wobble) drifting slowly around the dashboard and setup; on busier screens they float in the bottom corner, and every scrolling screen leaves room so nothing stays underneath.

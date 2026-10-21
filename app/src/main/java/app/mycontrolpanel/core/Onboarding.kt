@@ -14,6 +14,7 @@ enum class Feature(val label: String, val hint: String) {
     WATER("Water", "Glasses through the day"),
     MEALS("Meals", "Breakfast, lunch, dinner"),
     DONE_TALLY("Done today", "A gentle count of what you finished"),
+    MOCHI("Mochi wanders about", "She hops between your widgets and says little things now and then"),
     OVERWHELMED("Breather bubble", "A floating bubble on every screen: tap it to breathe when it's a lot"),
 }
 
@@ -63,7 +64,7 @@ fun displayName(p: Prefs, account: Account?): String? =
     p.nickname.trim().ifBlank { account?.name?.trim()?.substringBefore(' ') ?: "" }.takeIf { it.isNotBlank() }
 
 object Onboarding {
-    val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP, Feature.OVERWHELMED)
+    val SIMPLE_CORE = setOf(Feature.NOW, Feature.TODAY, Feature.BRAIN_DUMP, Feature.OVERWHELMED, Feature.MOCHI)
     val BALANCED_CORE = SIMPLE_CORE + setOf(Feature.TIME_LEFT, Feature.NEXT_EVENT, Feature.MODE_WIDGETS, Feature.QUICK_ROUTINES)
 
     fun preset(p: Profile): Set<Feature> = when (p) {

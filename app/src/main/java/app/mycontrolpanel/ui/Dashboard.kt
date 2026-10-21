@@ -109,7 +109,7 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
                 Banners(s, env, dispatch)
                 if (Feature.NOW in f) NowCard(s, env, dispatch)
                 RightColumnContent(s, env, dispatch, oneColumn = true)
-                Spacer(Modifier.height(72.dp))   // room to scroll the last card clear of the breather bubble
+                Spacer(Modifier.height(BubbleRoom))   // room to scroll the last card clear of the breather bubble
             }
             ActionBar(s, dispatch, Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, p.bg2.copy(alpha = 0.92f), p.bg2.copy(alpha = 0.92f)))).padding(horizontal = win.gutter, vertical = 10.dp))
         }
@@ -131,7 +131,7 @@ fun Dashboard(s: AppState, env: Env, dispatch: Dispatch) {
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Banners(s, env, dispatch)
             RightColumnContent(s, env, dispatch, oneColumn = false)
-            Spacer(Modifier.height(84.dp))   // room to scroll clear of the breather bubble
+            Spacer(Modifier.height(BubbleRoom))   // room to scroll clear of the breather bubble
         }
     }
 }
@@ -142,7 +142,7 @@ private fun ActionBar(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val win = LocalWindow.current
         val narrow = win.width < 420.dp || (win.twoColumn && win.short)
-        if (Feature.BRAIN_DUMP in f) PrimaryButton(if (narrow) "＋ Brain dump" else "＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f),
+        if (Feature.BRAIN_DUMP in f) PrimaryButton(if (narrow) "＋ Brain dump" else "＋  Brain dump", { dispatch(Action.OpenDialog(Dialog.Capture)) }, Modifier.weight(1f).perch("dump"),
             tag = "captureButton", tall = if (narrow) 56.dp else 60.dp, style = if (narrow) Type.label else Type.heading)
         else Spacer(Modifier.weight(1f))
         if (Feature.QUICK_ROUTINES in f) {
@@ -195,7 +195,7 @@ private fun RightColumnContent(s: AppState, env: Env, dispatch: Dispatch, oneCol
         app.mycontrolpanel.core.SyncStatus.CONNECTING -> " · connecting…"
         app.mycontrolpanel.core.SyncStatus.LOCAL_ONLY -> ""
     }
-    T("My Control Panel · v${LocalPlatform.current.versionName}$sync", Type.small, p.muted.copy(alpha = 0.6f), Modifier.testTag("footer"))
+    T("DayDock · v${LocalPlatform.current.versionName}$sync", Type.small, p.muted.copy(alpha = 0.6f), Modifier.testTag("footer"))
 }
 
 /** The big tinted panel: mode, clock, date, next event, time left. */
@@ -320,7 +320,7 @@ private fun TimeLeftBar(s: AppState, env: Env, eff: Effective) {
 private fun NowCard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val item = Derive.now(s, env)
-    PanelCard(Modifier.fillMaxWidth().testTag("nowCard"), padding = 24.dp) {
+    PanelCard(Modifier.fillMaxWidth().testTag("nowCard").perch("now"), padding = 24.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Eyebrow("Right now", p.accent)
             when (item) {
@@ -419,7 +419,7 @@ private fun Banners(s: AppState, env: Env, dispatch: Dispatch) {
 private fun TodayCard(s: AppState, env: Env, dispatch: Dispatch) {
     val p = P()
     val list = Derive.tasksFor(s, TaskFilter.TODAY, env)
-    PanelCard(Modifier.fillMaxWidth().testTag("todayCard")) {
+    PanelCard(Modifier.fillMaxWidth().testTag("todayCard").perch("today")) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // Title on its own line; the two links wrap underneath when space is short (phones, big text).
             androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center,
@@ -468,7 +468,7 @@ private fun WaterCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val p = P()
     val prefs = s.data.prefs
     val n = s.data.daily.water
-    PanelCard(modifier.testTag("waterCard")) {
+    PanelCard(modifier.testTag("waterCard").perch("water")) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Eyebrow("Water")
             Row(verticalAlignment = Alignment.Bottom) {
@@ -494,7 +494,7 @@ private fun MealsCard(s: AppState, dispatch: Dispatch, modifier: Modifier) {
     val p = P()
     val names = s.data.prefs.mealNames
     val done = s.data.daily.mealsDone
-    PanelCard(modifier.testTag("mealsCard")) {
+    PanelCard(modifier.testTag("mealsCard").perch("meals")) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Eyebrow("Meals")
             names.forEachIndexed { i, name ->
@@ -533,7 +533,7 @@ private fun ModeWidgetCard(w: ModeWidget, mode: Mode, s: AppState, env: Env, dis
     val p = P()
     val platform = LocalPlatform.current
     val use24h = s.data.prefs.use24h
-    PanelCard(modifier.testTag("widget_${w.name}")) {
+    PanelCard(modifier.testTag("widget_${w.name}").perch("w_${w.name}")) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (w) {
                 ModeWidget.TASKS -> {

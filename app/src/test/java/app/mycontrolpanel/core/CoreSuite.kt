@@ -567,7 +567,9 @@ object CoreSuite {
         "breather bubble: on in every preset, and switched on for older installs" to {
             Profile.values().forEach { ok(Feature.OVERWHELMED in Onboarding.preset(it), "in ${it.name}") }
             val old = Codec.decode("""{"schema":3,"prefs":{"features":["NOW"]}}""")
-            eq(setOf(Feature.NOW, Feature.OVERWHELMED), old.prefs.features, "migrated")
+            eq(setOf(Feature.NOW, Feature.OVERWHELMED, Feature.MOCHI), old.prefs.features, "migrated")
+            eq(setOf(Feature.NOW, Feature.MOCHI), Codec.decode("""{"schema":4,"prefs":{"features":["NOW"]}}""").prefs.features, "v4 gets Mochi")
+            Profile.values().forEach { ok(Feature.MOCHI in Onboarding.preset(it), "Mochi in ${it.name}") }
             val cur = Codec.decode(Codec.encode(old.copy(prefs = old.prefs.copy(features = setOf(Feature.NOW)))))
             eq(setOf(Feature.NOW), cur.prefs.features, "turning it off sticks")
         },

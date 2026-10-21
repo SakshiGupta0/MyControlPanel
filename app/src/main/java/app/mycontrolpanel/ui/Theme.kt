@@ -82,21 +82,22 @@ val LocalReduceMotion = staticCompositionLocalOf { false }
 /** The current mode's colour wash (already adjusted for the palette). */
 val LocalModeTint = staticCompositionLocalOf { TINTS[1] }
 
+/** Soft, rounded and bubbly: Fredoka for the clock and titles, Nunito for everything you read (both OFL, see licenses/). */
 val Display = FontFamily(
-    Font(R.font.fraunces_light, FontWeight.Light),
-    Font(R.font.fraunces_regular, FontWeight.Normal),
-    Font(R.font.fraunces_semibold, FontWeight.SemiBold),
+    Font(R.font.fredoka_regular, FontWeight.Light),
+    Font(R.font.fredoka_medium, FontWeight.Normal),
+    Font(R.font.fredoka_semibold, FontWeight.SemiBold),
 )
 val Sans = FontFamily(
-    Font(R.font.dmsans_regular, FontWeight.Normal),
-    Font(R.font.dmsans_medium, FontWeight.Medium),
-    Font(R.font.dmsans_semibold, FontWeight.SemiBold),
+    Font(R.font.nunito_regular, FontWeight.Normal),
+    Font(R.font.nunito_semibold, FontWeight.Medium),
+    Font(R.font.nunito_bold, FontWeight.SemiBold),
 )
 
 object Type {
-    val clock = TextStyle(fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 136.sp, lineHeight = 136.sp, letterSpacing = (-3).sp)
-    val display = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 44.sp, lineHeight = 52.sp, letterSpacing = (-0.5).sp)
-    val title = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 30.sp, lineHeight = 38.sp)
+    val clock = TextStyle(fontFamily = Display, fontWeight = FontWeight.Light, fontSize = 124.sp, lineHeight = 128.sp, letterSpacing = (-2).sp)
+    val display = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 40.sp, lineHeight = 48.sp, letterSpacing = 0.sp)
+    val title = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 28.sp, lineHeight = 36.sp)
     val heading = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp)
     val body = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Normal, fontSize = 20.sp, lineHeight = 29.sp)
     val label = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 24.sp)

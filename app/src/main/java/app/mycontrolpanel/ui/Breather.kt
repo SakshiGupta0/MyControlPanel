@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.mycontrolpanel.core.Action
 import app.mycontrolpanel.core.AppState
 import app.mycontrolpanel.system.SoundService
@@ -66,7 +67,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** Space left at the end of scrolling screens so the last button can always scroll clear of the bubbles. */
-val BubbleRoom = 120.dp
+val BubbleRoom = 160.dp
 
 private val BubbleLight = Color(0xFFE4E6FA)
 private val BubbleMid = Color(0xFFC3CDF2)
@@ -85,7 +86,7 @@ fun FloatingBubbles(onOpen: () -> Unit, modifier: Modifier = Modifier, topInset:
     val wob = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(5_000, easing = LinearEasing)), label = "wob")
     val shimmer = tr.animateFloat(0f, 360f, infiniteRepeatable(tween(12_000, easing = LinearEasing)), label = "shimmer")
     androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
-        val cluster = if (LocalWindow.current.compact) 92.dp else 116.dp
+        val cluster = if (LocalWindow.current.compact) 132.dp else 168.dp
         val d = androidx.compose.ui.platform.LocalDensity.current
         val sPx = with(d) { cluster.toPx() }
         val left = with(d) { 8.dp.toPx() }
@@ -250,7 +251,7 @@ fun SplashIntro(phase: Phase, onDone: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MochiHome(if (phase == Phase.NIGHT) BeanMood.SLEEPY else BeanMood.HAPPY,
                 Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }, size = 220.dp)
-            T("My Control Panel", Type.display, pal.text)
+            T("DayDock", Type.display.copy(fontSize = 48.sp, lineHeight = 54.sp), pal.text)
             T("One calm thing at a time", Type.label, pal.muted)
         }
     }

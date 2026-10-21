@@ -31,10 +31,12 @@ object Codec {
         val routines = (root["routines"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::routineIn) } ?: defaults.routines
         val fileSchema = (root["schema"] as? Number)?.toInt() ?: 0
         val prefs0 = (root["prefs"] as? Map<*, *>)?.let(::prefsIn) ?: Prefs()
-        // v4: the breather bubble is on for everyone by default.
-        val prefs = if (fileSchema in 1..3) prefs0.copy(features = prefs0.features + Feature.OVERWHELMED) else prefs0
+        // v4: the breather bubble is on for everyone by default. v5: so is Mochi wandering about.
+        val prefs = prefs0.copy(features = prefs0.features +
+            (if (fileSchema in 1..3) setOf(Feature.OVERWHELMED) else emptySet()) +
+            (if (fileSchema in 1..4) setOf(Feature.MOCHI) else emptySet()))
         return AppData(
-            schema = 4,
+            schema = 5,
             modes = modes,
             routines = routines,
             tasks = (root["tasks"] as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::taskIn) } ?: emptyList(),

@@ -238,7 +238,7 @@ fun MochiHome(mood: BeanMood, modifier: Modifier = Modifier, size: Dp = 160.dp) 
     val tr = rememberInfiniteTransition(label = "home")
     val heart: State<Float> = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(3_600, easing = LinearEasing)), label = "heart")
     val lamp: State<Float> = tr.animateFloat(0f, 1f, infiniteRepeatable(tween(2_800, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "lamp")
-    Box(modifier.size(size).testTag("mochiHome")) {
+    Box(modifier.size(size).testTag("mochiHome").perch("home")) {
         Canvas(Modifier.fillMaxSize()) {
             val w = this.size.width
             fun p(x: Float, y: Float) = Offset(w * x, w * y)
@@ -298,7 +298,8 @@ fun MochiHome(mood: BeanMood, modifier: Modifier = Modifier, size: Dp = 160.dp) 
             val roofHiPath = Path().apply { moveTo(w * 0.12f, w * 0.465f); lineTo(w * 0.50f, w * 0.135f); lineTo(w * 0.88f, w * 0.465f) }
             drawPath(roofHiPath, roofHi, style = Stroke(w * 0.035f, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
-        Bean(mood, Modifier.align(Alignment.BottomCenter).offset(y = -size * 0.085f), size = size * 0.40f)
+        // When Mochi is out wandering (dashboard), she's drawn by the companion; the cushion waits for her.
+        if (LocalPerches.current == null) Bean(mood, Modifier.align(Alignment.BottomCenter).offset(y = -size * 0.085f), size = size * 0.40f)
     }
 }
 

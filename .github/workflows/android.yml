@@ -40,7 +40,7 @@ jobs:
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/MyControlPanel-v${VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/DayDock-v${VERSION}.apk"
       - name: Check the APK is signed with the panel key
         run: |
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
@@ -163,7 +163,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: My Control Panel — build ${{ github.run_number }}
+          name: DayDock — build ${{ github.run_number }}
           body: |
             Passed: core logic tests + emulator smoke tests.
             Install: open this page on the tablet, tap the .apk below, allow "Install unknown apps" for your browser if asked.

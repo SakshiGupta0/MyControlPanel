@@ -71,7 +71,7 @@ fun SettingsScreen(s: AppState, section: SettingsSection, dispatch: Dispatch) {
             Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeSettings")
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).perch("tabs"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SettingsSection.values().forEach { sec ->
                         Chip(sec.label, sec == section, { dispatch(Action.OpenSettings(sec)) }, tag = "settingsSection_${sec.name}")
                     }
@@ -343,7 +343,7 @@ private fun DeviceSection(s: AppState, dispatch: Dispatch) {
             T(if (allowed) "Allowed. Routines set to “card + quiet notification” will post a silent notification when the panel isn't on screen."
               else "Not allowed yet. Needed only for routines set to “card + quiet notification”.", Type.body, p.muted)
             if (!allowed) PrimaryButton("Allow notifications", { platform.requestNotifications() })
-            T("Tip: on Samsung, set this app's battery usage to “Unrestricted” (Settings → Apps → My Control Panel → Battery) so reminders aren't delayed.", Type.small, p.muted)
+            T("Tip: on Samsung, set this app's battery usage to “Unrestricted” (Settings → Apps → DayDock → Battery) so reminders aren't delayed.", Type.small, p.muted)
         }
     }
 }
@@ -404,7 +404,7 @@ private fun AccountSection(s: AppState, dispatch: Dispatch) {
                     T(sp.inviteCode, Type.title.copy(letterSpacing = androidx.compose.ui.unit.TextUnit(4f, androidx.compose.ui.unit.TextUnitType.Sp)), p.accent)
                     Spacer(Modifier.weight(1f))
                     SecondaryButton("Share invite", { platform.share(
-                        "Join my “${sp.name}” list on My Control Panel: open the app → Settings → Account & sharing → Join, and enter code ${sp.inviteCode}") })
+                        "Join my “${sp.name}” list on DayDock: open the app → Settings → Account & sharing → Join, and enter code ${sp.inviteCode}") })
                     QuietButton("Leave", { platform.leaveSpace(sp.id) }, color = p.danger)
                 }
             }
@@ -452,10 +452,10 @@ private fun AboutSection() {
     val v = LocalPlatform.current.versionName
     PanelCard(Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            T("My Control Panel  v$v", Type.heading)
+            T("DayDock  v$v", Type.heading)
             T("Dashboard with one Right-now card, modes & schedule, heads-up before changes, routines with timers and breathing, Quick Routines, built-in tasks (inbox, today's three, pick-one), focus timer, calendar, music controls.", Type.body, p.muted)
             T("Accounts (Sign in with Google), sync across your devices, shared task spaces, Google Tasks two-way sync.", Type.body, p.muted)
-            T("Fonts: Fraunces and DM Sans (SIL Open Font License).", Type.small, p.muted)
+            T("Fonts: Fredoka and Nunito (SIL Open Font License).", Type.small, p.muted)
             T("Without an account everything stays on this tablet. Signed in, your data is stored in your own Firebase project and only you (and people in spaces you share) can read it.", Type.body, p.muted)
         }
     }
@@ -484,8 +484,8 @@ private fun GoogleTasksCard(s: AppState, dispatch: Dispatch) {
                             dispatch(Action.ChooseGList(id, title, copyExisting)); picking = false
                         }, tag = "glist_$title")
                     }
-                    if (s.live.gLists.none { it.second == "Control Panel" })
-                        Chip("＋ New list “Control Panel”", false, { platform.createGList("Control Panel", copyExisting); picking = false })
+                    if (s.live.gLists.none { it.second == "DayDock" })
+                        Chip("＋ New list “DayDock”", false, { platform.createGList("DayDock", copyExisting); picking = false })
                 }
                 ToggleRow("Also copy tasks I already have in the app into this list", copyExisting, { copyExisting = it })
             }

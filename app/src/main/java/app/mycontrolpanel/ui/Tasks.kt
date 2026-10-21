@@ -71,10 +71,10 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
                     if (sp != null) T("Shared with ${sp.members.values.joinToString(", ")}. Everyone sees ticks and new tasks right away.", Type.label, p.muted)
                 }
             }
-            PanelCard(Modifier.fillMaxWidth()) {
+            PanelCard(Modifier.fillMaxWidth().perch("list")) {
                 Column {
                     if (list.isEmpty()) Row(Modifier.padding(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Bean(if (filter == TaskFilter.INBOX) BeanMood.HAPPY else BeanMood.CALM, size = 64.dp)
+                        if (LocalPerches.current == null) Bean(if (filter == TaskFilter.INBOX) BeanMood.HAPPY else BeanMood.CALM, size = 64.dp)
                         androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
                         T(when (filter) {
                             TaskFilter.TODAY -> "Nothing picked for today yet. Mochi suggests one small thing."
@@ -98,7 +98,7 @@ fun TasksScreen(s: AppState, filter: String, env: Env, dispatch: Dispatch) {
             Column(Modifier.fillMaxWidth().background(p.cardStrong).padding(horizontal = win.gutter, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("‹  Dashboard", { dispatch(Action.GoDashboard) }, tag = "closeTasks")
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).perch("tabs"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     filters.forEach { (id, label) -> Chip(label, id == filter, { dispatch(Action.OpenTasks(id)) }, tag = "filter_$id") }
                 }
             }

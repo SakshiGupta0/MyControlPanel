@@ -70,6 +70,10 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
             is Screen.Settings -> "settings"; is Screen.ModeEditor -> "modeEditor"; is Screen.RoutineEditor -> "routineEditor"
             is Screen.Tasks -> "tasks"; Screen.Focus -> "focus"; is Screen.Onboarding -> "onboarding"
         }
+        // Mochi wanders on the main screens; elsewhere she stays in her house.
+        val mochiOut = app.mycontrolpanel.core.Feature.MOCHI in s.data.prefs.features && kind in setOf("dashboard", "tasks", "settings")
+        val perches = remember(kind) { Perches() }
+        androidx.compose.runtime.CompositionLocalProvider(LocalPerches provides (if (mochiOut) perches else null)) {
         AnimatedContent(targetState = kind, label = "screen",
             transitionSpec = { if (reduceMotion) fadeIn(tween(0)) togetherWith fadeOut(tween(0)) else fadeIn(tween(220)) togetherWith fadeOut(tween(160)) }
         ) { k ->
@@ -85,6 +89,8 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
                 is Screen.Onboarding -> if (k == "onboarding") OnboardingScreen(s, sc, dispatch)
             }
         }
+
+        }   // LocalPerches
 
         when (val dl = s.ui.dialog) {
             null -> {}
@@ -104,6 +110,8 @@ fun AppRoot(s: AppState, env: Env, dispatch: Dispatch) {
             Dialog.Capture -> CaptureDialog(s, dispatch)
             is Dialog.TaskEditor -> TaskEditorDialog(s, dl.task, dl.isNew, dispatch)
         }
+
+        if (mochiOut && !breathing && !splash) MochiCompanion(s, env, perches)
 
         val features = s.data.prefs.features
         if (app.mycontrolpanel.core.Feature.OVERWHELMED in features && !breathing && !splash)
