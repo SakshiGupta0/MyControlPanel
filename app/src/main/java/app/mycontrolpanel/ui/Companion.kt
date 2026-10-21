@@ -134,10 +134,18 @@ fun MochiCompanion(s: AppState, env: Env, perches: Perches) {
             val size = r.width * 0.40f
             return Offset(r.center.x - size / 2, r.bottom - r.width * 0.085f - size) to size
         }
-        val frac = listOf(0.32f, 0.46f, 0.60f)[hash(k, 3) % 3]
-        val x = (r.left + (r.width - basePx) * frac).coerceAtLeast(4f)
-        val y = (r.top - basePx * 0.80f).coerceAtLeast(4f)
-        return Offset(x, y) to basePx
+        // Try a few spots along the top edge; take the first where she doesn't cover another widget or button.
+        val others = visible().filter { it.first != id && it.first != "home" }.map { it.second }
+        val start = hash(k, 3) % 5
+        val fracs = listOf(0.32f, 0.46f, 0.60f, 0.12f, 0.82f)
+        for (i in fracs.indices) {
+            val f = fracs[(start + i) % fracs.size]
+            val x = (r.left + (r.width - basePx) * f).coerceAtLeast(4f)
+            val y = r.top - basePx * 0.80f
+            val body = Rect(x + basePx * 0.15f, y + basePx * 0.2f, x + basePx * 0.85f, y + basePx * 0.95f)
+            if (y > 4f && others.none { it.overlaps(body) }) return Offset(x, y) to basePx
+        }
+        return Offset(Float.NaN, Float.NaN) to basePx   // no free spot here
     }
 
     fun pick(k: Int, list: List<Pair<String, Rect>>): Pair<String, Rect>? {
@@ -146,7 +154,10 @@ fun MochiCompanion(s: AppState, env: Env, perches: Perches) {
         if (reduce) return home ?: list.first()
         // she goes home a little more often than anywhere else
         val pool = list + listOfNotNull(home)
-        return pool[hash(k, 1) % pool.size]
+        val choice = pool[hash(k, 1) % pool.size]
+        // somewhere she'd cover a button? go home (or the first place with room) instead
+        if (!seat(choice.first, choice.second, k).first.x.isNaN()) return choice
+        return home ?: list.firstOrNull { !seat(it.first, it.second, k).first.x.isNaN() }
     }
 
     // Where she is right now, worked out from the clock — so it's cheap (layout/draw only) and stops in tests.
@@ -157,12 +168,15 @@ fun MochiCompanion(s: AppState, env: Env, perches: Perches) {
         val u = t - k
         val cur = pick(k, list) ?: return null
         val (to, toSize) = seat(cur.first, cur.second, k)
+        if (to.x.isNaN()) return null
         if (reduce || u >= WALK) {
             val idle = if (reduce) 0f else sin(u * 2 * PI * 6).toFloat() * basePx * 0.015f
             return Triple(to + Offset(0f, idle), toSize, 0f)
         }
         val prev = pick(k - 1, list) ?: cur
-        val (from, fromSize) = seat(prev.first, prev.second, k - 1)
+        val (from0, fromSize0) = seat(prev.first, prev.second, k - 1)
+        val from = if (from0.x.isNaN()) to else from0
+        val fromSize = if (from0.x.isNaN()) toSize else fromSize0
         val q = FastOutSlowInEasing.transform(u / WALK)
         val pos = Offset(from.x + (to.x - from.x) * q, from.y + (to.y - from.y) * q)
         val hop = abs(sin(q * PI * 4).toFloat()) * basePx * 0.22f
